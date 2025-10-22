@@ -37,6 +37,7 @@ export const generateMockPosts = (count = 50) => {
     const requestType = requestTypes[Math.floor(Math.random() * requestTypes.length)]
     const daysAgo = Math.floor(Math.random() * 90)
     
+    const postDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
     posts.push({
       id: `post_${i + 1}`,
       author: `User${Math.floor(Math.random() * 1000)}`,
@@ -47,7 +48,8 @@ export const generateMockPosts = (count = 50) => {
       isPlatformRelated: isPlatformRelated,
       likes: Math.floor(Math.random() * 100),
       replies: Math.floor(Math.random() * 50),
-      date: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+      date: postDate.toISOString(),
+      url: `https://community.comdirect.de/t5/post/${i + 1}`,
       tags: generateTags(topic, requestType)
     })
   }
@@ -163,7 +165,7 @@ export const savePosts = (posts) => {
 }
 
 /**
- * Migrate old posts to include isPlatformRelated field
+ * Migrate old posts to include isPlatformRelated and url fields
  */
 const migratePosts = (posts) => {
   const platformTopics = [
@@ -173,15 +175,21 @@ const migratePosts = (posts) => {
     'Private messaging', 'Topic subscriptions', 'Community guidelines'
   ]
   
-  return posts.map(post => {
+  return posts.map((post, index) => {
+    const updates = {}
+    
     // If the post doesn't have isPlatformRelated field, add it based on topic
     if (post.isPlatformRelated === undefined) {
-      return {
-        ...post,
-        isPlatformRelated: platformTopics.includes(post.topic)
-      }
+      updates.isPlatformRelated = platformTopics.includes(post.topic)
     }
-    return post
+    
+    // If the post doesn't have a URL field, generate one
+    if (!post.url) {
+      updates.url = `https://community.comdirect.de/t5/post/${post.id.replace('post_', '')}`
+    }
+    
+    // Return post with updates if any, otherwise return original
+    return Object.keys(updates).length > 0 ? { ...post, ...updates } : post
   })
 }
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { fetchCommunityPosts, savePosts, loadPosts, clearPosts } from '../utils/dataCollector'
-import { Download, RefreshCw, Trash2, CheckCircle, AlertCircle } from 'lucide-react'
+import { Download, RefreshCw, Trash2, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react'
 
 function DataCollector() {
   const [loading, setLoading] = useState(false)
@@ -268,7 +268,7 @@ function DataCollector() {
           </h2>
           {displayedPosts.length > 0 && (
             <p className="text-xs text-gray-500 dark:text-gray-400 italic">
-              💡 Click any row to expand and see full content
+              💡 Click author/topic/content to expand full message
             </p>
           )}
         </div>
@@ -288,6 +288,7 @@ function DataCollector() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Date</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Author</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Topic</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Content</th>
@@ -295,20 +296,43 @@ function DataCollector() {
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Type</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Sentiment</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Engagement</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Link</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedPosts.slice(0, 20).map((post) => {
                   const isExpanded = expandedRows.has(post.id)
+                  const postDate = new Date(post.date)
+                  const formattedDate = postDate.toLocaleDateString('en-GB', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric' 
+                  })
+                  
                   return (
                     <tr 
                       key={post.id} 
-                      onClick={() => toggleRowExpansion(post.id)}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                     >
-                      <td className="p-3 text-gray-800 dark:text-gray-200">{post.author}</td>
-                      <td className="p-3 text-gray-800 dark:text-gray-200">{post.topic}</td>
-                      <td className={`p-3 text-gray-600 dark:text-gray-400 ${isExpanded ? '' : 'max-w-md truncate'}`}>
+                      <td className="p-3 text-gray-600 dark:text-gray-400 text-sm whitespace-nowrap">
+                        {formattedDate}
+                      </td>
+                      <td 
+                        className="p-3 text-gray-800 dark:text-gray-200 cursor-pointer"
+                        onClick={() => toggleRowExpansion(post.id)}
+                      >
+                        {post.author}
+                      </td>
+                      <td 
+                        className="p-3 text-gray-800 dark:text-gray-200 cursor-pointer"
+                        onClick={() => toggleRowExpansion(post.id)}
+                      >
+                        {post.topic}
+                      </td>
+                      <td 
+                        className={`p-3 text-gray-600 dark:text-gray-400 cursor-pointer ${isExpanded ? '' : 'max-w-md truncate'}`}
+                        onClick={() => toggleRowExpansion(post.id)}
+                      >
                         {post.content}
                       </td>
                       <td className="p-3">
@@ -340,6 +364,20 @@ function DataCollector() {
                       </td>
                       <td className="p-3 text-gray-600 dark:text-gray-400">
                         {post.likes} likes, {post.replies} replies
+                      </td>
+                      <td className="p-3">
+                        {post.url && (
+                          <a 
+                            href={post.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center space-x-1 text-comdirect-blue hover:text-comdirect-yellow transition-colors"
+                          >
+                            <ExternalLink size={16} />
+                            <span className="text-xs">View</span>
+                          </a>
+                        )}
                       </td>
                     </tr>
                   )

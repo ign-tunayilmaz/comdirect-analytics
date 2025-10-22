@@ -6,6 +6,7 @@ function DataCollector() {
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
   const [posts, setPosts] = useState(loadPosts())
+  const [expandedRows, setExpandedRows] = useState(new Set())
   const [filters, setFilters] = useState({
     sentiment: '',
     requestType: '',
@@ -14,6 +15,16 @@ function DataCollector() {
     dateTo: '',
     limit: 50
   })
+
+  const toggleRowExpansion = (postId) => {
+    const newExpanded = new Set(expandedRows)
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId)
+    } else {
+      newExpanded.add(postId)
+    }
+    setExpandedRows(newExpanded)
+  }
 
   // Filter posts for display based on current filter settings
   const getFilteredPostsForDisplay = () => {
@@ -246,14 +257,21 @@ function DataCollector() {
 
       {/* Data Overview */}
       <div className="card">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
-          Collected Data ({displayedPosts.length} posts)
-          {displayedPosts.length !== posts.length && (
-            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
-              (filtered from {posts.length} total)
-            </span>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+            Collected Data ({displayedPosts.length} posts)
+            {displayedPosts.length !== posts.length && (
+              <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
+                (filtered from {posts.length} total)
+              </span>
+            )}
+          </h2>
+          {displayedPosts.length > 0 && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+              💡 Click any row to expand and see full content
+            </p>
           )}
-        </h2>
+        </div>
         
         {posts.length === 0 ? (
           <div className="text-center py-12">
@@ -280,43 +298,52 @@ function DataCollector() {
                 </tr>
               </thead>
               <tbody>
-                {displayedPosts.slice(0, 20).map((post) => (
-                  <tr key={post.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="p-3 text-gray-800 dark:text-gray-200">{post.author}</td>
-                    <td className="p-3 text-gray-800 dark:text-gray-200">{post.topic}</td>
-                    <td className="p-3 text-gray-600 dark:text-gray-400 max-w-md truncate">{post.content}</td>
-                    <td className="p-3">
-                      {post.isPlatformRelated ? (
-                        <span className="px-2 py-1 text-xs rounded-full bg-comdirect-yellow text-comdirect-dark font-semibold">
-                          Platform
+                {displayedPosts.slice(0, 20).map((post) => {
+                  const isExpanded = expandedRows.has(post.id)
+                  return (
+                    <tr 
+                      key={post.id} 
+                      onClick={() => toggleRowExpansion(post.id)}
+                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                    >
+                      <td className="p-3 text-gray-800 dark:text-gray-200">{post.author}</td>
+                      <td className="p-3 text-gray-800 dark:text-gray-200">{post.topic}</td>
+                      <td className={`p-3 text-gray-600 dark:text-gray-400 ${isExpanded ? '' : 'max-w-md truncate'}`}>
+                        {post.content}
+                      </td>
+                      <td className="p-3">
+                        {post.isPlatformRelated ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-comdirect-yellow text-comdirect-dark font-semibold">
+                            Platform
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            General
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                          {post.requestType.replace(/_/g, ' ')}
                         </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                          General
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          post.sentiment === 'positive' 
+                            ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                            : post.sentiment === 'negative'
+                            ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                        }`}>
+                          {post.sentiment}
                         </span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                        {post.requestType.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        post.sentiment === 'positive' 
-                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                          : post.sentiment === 'negative'
-                          ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                      }`}>
-                        {post.sentiment}
-                      </span>
-                    </td>
-                    <td className="p-3 text-gray-600 dark:text-gray-400">
-                      {post.likes} likes, {post.replies} replies
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-3 text-gray-600 dark:text-gray-400">
+                        {post.likes} likes, {post.replies} replies
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
             {displayedPosts.length > 20 && (

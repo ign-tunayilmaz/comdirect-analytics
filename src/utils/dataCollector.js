@@ -36,20 +36,25 @@ export const generateMockPosts = (count = 50) => {
     const sentiment = sentiments[Math.floor(Math.random() * sentiments.length)]
     const requestType = requestTypes[Math.floor(Math.random() * requestTypes.length)]
     const daysAgo = Math.floor(Math.random() * 90)
+    // 70% German, 30% English (reflecting comdirect's German market)
+    const language = Math.random() < 0.7 ? 'de' : 'en'
     
     const postDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+    const postId = Math.floor(100000 + Math.random() * 900000) // Realistic post ID
+    
     posts.push({
-      id: `post_${i + 1}`,
+      id: `post_${postId}`,
       author: `User${Math.floor(Math.random() * 1000)}`,
       topic: topic,
-      content: generatePostContent(topic, requestType),
+      content: generatePostContent(topic, requestType, language),
+      contentLanguage: language,
       sentiment: sentiment,
       requestType: requestType,
       isPlatformRelated: isPlatformRelated,
       likes: Math.floor(Math.random() * 100),
       replies: Math.floor(Math.random() * 50),
       date: postDate.toISOString(),
-      url: `https://community.comdirect.de/t5/post/${i + 1}`,
+      url: `https://community.comdirect.de/t5/community/m-p/${postId}`,
       tags: generateTags(topic, requestType)
     })
   }
@@ -57,8 +62,8 @@ export const generateMockPosts = (count = 50) => {
   return posts
 }
 
-const generatePostContent = (topic, requestType) => {
-  const templates = {
+const generatePostContent = (topic, requestType, language = 'en') => {
+  const templatesEN = {
     feature_request: [
       `Would love to see improvements in ${topic}. It would make a huge difference!`,
       `Any plans to add ${topic} functionality? This would be really helpful.`,
@@ -90,7 +95,41 @@ const generatePostContent = (topic, requestType) => {
       `Impressed by ${topic}. Best in class!`
     ]
   }
+
+  const templatesDE = {
+    feature_request: [
+      `Würde gerne Verbesserungen bei ${topic} sehen. Das würde einen großen Unterschied machen!`,
+      `Gibt es Pläne für ${topic} Funktionalität? Das wäre wirklich hilfreich.`,
+      `${topic} braucht ein Upgrade. Hier sind meine Vorschläge...`
+    ],
+    bug_report: [
+      `Ich habe Probleme mit ${topic}. Kann mir jemand helfen?`,
+      `${topic} funktioniert nicht wie erwartet. Hat das noch jemand bemerkt?`,
+      `Fehlerbericht: ${topic} verursacht Probleme in meinem Konto.`
+    ],
+    question: [
+      `Kurze Frage zu ${topic} - wie funktioniert das?`,
+      `Kann mir jemand ${topic} erklären?`,
+      `Suche Informationen bezüglich ${topic}.`
+    ],
+    feedback: [
+      `Meine Erfahrung mit ${topic} war insgesamt großartig.`,
+      `Einige Gedanken zu ${topic} und wie es verbessert werden könnte.`,
+      `Feedback zu ${topic}: generell gut, aber Verbesserungspotenzial.`
+    ],
+    complaint: [
+      `Wirklich frustriert mit ${topic}. Das muss dringend behoben werden!`,
+      `${topic} ist schrecklich. Sehr enttäuscht.`,
+      `Unzufrieden mit ${topic}. Besseren Service erwartet.`
+    ],
+    praise: [
+      `${topic} ist ausgezeichnet! Macht weiter so!`,
+      `Liebe die ${topic} Funktion. Macht alles so viel einfacher.`,
+      `Beeindruckt von ${topic}. Erstklassig!`
+    ]
+  }
   
+  const templates = language === 'de' ? templatesDE : templatesEN
   const templateList = templates[requestType] || templates.feedback
   return templateList[Math.floor(Math.random() * templateList.length)]
 }
@@ -165,7 +204,7 @@ export const savePosts = (posts) => {
 }
 
 /**
- * Migrate old posts to include isPlatformRelated and url fields
+ * Migrate old posts to include isPlatformRelated, url, and contentLanguage fields
  */
 const migratePosts = (posts) => {
   const platformTopics = [
@@ -185,7 +224,13 @@ const migratePosts = (posts) => {
     
     // If the post doesn't have a URL field, generate one
     if (!post.url) {
-      updates.url = `https://community.comdirect.de/t5/post/${post.id.replace('post_', '')}`
+      const postId = post.id.replace('post_', '')
+      updates.url = `https://community.comdirect.de/t5/community/m-p/${postId}`
+    }
+    
+    // If the post doesn't have a language field, default to 'en'
+    if (!post.contentLanguage) {
+      updates.contentLanguage = 'en'
     }
     
     // Return post with updates if any, otherwise return original

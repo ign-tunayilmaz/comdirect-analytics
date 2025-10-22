@@ -290,6 +290,7 @@ function DataCollector() {
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Date</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Author</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Lang</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Topic</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Content</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Category</th>
@@ -322,6 +323,15 @@ function DataCollector() {
                         onClick={() => toggleRowExpansion(post.id)}
                       >
                         {post.author}
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-1 text-xs rounded-full font-semibold ${
+                          post.contentLanguage === 'de' 
+                            ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                            : 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
+                        }`}>
+                          {post.contentLanguage?.toUpperCase() || 'EN'}
+                        </span>
                       </td>
                       <td 
                         className="p-3 text-gray-800 dark:text-gray-200 cursor-pointer"
@@ -366,17 +376,19 @@ function DataCollector() {
                         {post.likes} likes, {post.replies} replies
                       </td>
                       <td className="p-3">
-                        {post.url && (
+                        {post.url ? (
                           <a 
                             href={post.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center space-x-1 text-comdirect-blue hover:text-comdirect-yellow transition-colors"
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-comdirect-blue hover:bg-comdirect-yellow text-white hover:text-comdirect-dark transition-all duration-200 font-medium text-xs"
                           >
-                            <ExternalLink size={16} />
-                            <span className="text-xs">View</span>
+                            <ExternalLink size={14} />
+                            <span>View Post</span>
                           </a>
+                        ) : (
+                          <span className="text-gray-400 text-xs">No link</span>
                         )}
                       </td>
                     </tr>

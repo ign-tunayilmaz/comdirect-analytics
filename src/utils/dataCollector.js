@@ -7,20 +7,41 @@ import { scrapeComdirectPosts } from './communityScraper'
  * In production, this would connect to actual scraping endpoints or APIs
  */
 export const generateMockPosts = (count = 50) => {
+  // REAL topics from comdirect community (scraped manually from community.comdirect.de)
   const topics = [
-    'Trading fees', 'Mobile app', 'Account security', 'Customer service',
-    'ETF savings plan', 'Depot transfer', 'API access', 'Real-time quotes',
-    'Tax documents', 'Options trading', 'Cryptocurrency', 'Dividends',
-    'Bank transfer speed', 'Interest rates', 'Credit cards', 'Login issues',
-    'Portfolio analysis', 'Market data', 'Trading hours', 'Order types'
+    'TKMS Aktien werden nicht eingebucht',
+    'High Yields und Junk',
+    'Comdirect lehnt Alipay/Wechat Zahlung ab',
+    'Werte im Depot werden nicht aktualisiert',
+    'NV Bescheinigung zurückziehen',
+    'Gold-Gold-Gold',
+    'Dauerauftrag in SEPA Nachbarland ändern',
+    'Tagesgeldkonto Echtzeit-Überweisung nicht möglich',
+    'Warum nur Aktienanleihen auf Rüstungsaktien',
+    'ETF mit fundamentalem Tilt',
+    'Börsenblubber 2025',
+    'Musterdepot 2025',
+    'Drei globale ETF-Alternativen zum MSCI World',
+    'Was haben wir zuletzt gekauft',
+    'Bären-Strategien für das 1. HJ 2025',
+    'So schwierig ist es Vermögen aufzubauen',
+    'IPO Ottobock',
+    'Looking for Financial Freedom',
+    'Wartungsarbeiten Ankündigung'
   ]
   
-  // Community platform related topics
+  // Community platform related topics (REAL from comdirect)
   const platformTopics = [
-    'Community forum features', 'Post notifications', 'User profile settings',
-    'Community moderation', 'Forum search functionality', 'Message threading',
-    'Community badges', 'Reputation system', 'Forum mobile app',
-    'Private messaging', 'Topic subscriptions', 'Community guidelines'
+    'comdirect wird barrierefrei',
+    'FAQ zur Empfängerüberprüfung (Verification of Payee)',
+    'photoTAN Probleme',
+    'Website & Apps Feedback',
+    'Community Regeln',
+    'Posting-Tipps',
+    'Community-Statistik',
+    'Ankündigung von Wartungsarbeiten',
+    'Community forum features',
+    'Brokerboard Diskussion'
   ]
   
   const sentiments = ['positive', 'negative', 'neutral']

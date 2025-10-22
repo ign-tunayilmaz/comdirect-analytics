@@ -10,47 +10,25 @@ const CORS_PROXY = 'https://api.allorigins.win/raw?url=' // CORS proxy for brows
 
 /**
  * Scrape posts from comdirect community
+ * 
+ * NOTE: Browser-based scraping is blocked by CORS policies.
+ * This function will always fail in the browser.
+ * 
+ * To get real data, you need to:
+ * 1. Set up a backend proxy server
+ * 2. Use the official Khoros API with credentials
+ * 3. Deploy a server-side scraper
  */
 export const scrapeComdirectPosts = async (options = {}) => {
   const { limit = 50, category = '', filters = {} } = options
 
-  try {
-    console.log('🔍 Scraping comdirect community...')
-    
-    // Fetch the main community page
-    const url = category ? `${COMMUNITY_BASE_URL}/t5/${category}/ct-p/${category}` : COMMUNITY_BASE_URL
-    const proxiedUrl = `${CORS_PROXY}${encodeURIComponent(url)}`
-    
-    const response = await axios.get(proxiedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    })
-
-    const html = response.data
-    
-    // Parse the HTML to extract posts
-    const posts = parseComdirectHTML(html, limit, filters)
-    
-    console.log(`✅ Scraped ${posts.length} real posts from comdirect community`)
-    
-    return {
-      posts,
-      total: posts.length,
-      source: 'web_scraping'
-    }
-
-  } catch (error) {
-    console.error('❌ Error scraping comdirect community:', error.message)
-    
-    // Fallback: Try to get posts from API endpoint
-    try {
-      return await scrapeFromAPI(limit, filters)
-    } catch (apiError) {
-      console.error('❌ API fallback also failed:', apiError.message)
-      throw new Error('Unable to fetch data from comdirect community. Please check your internet connection.')
-    }
-  }
+  // Immediately throw error explaining the limitation
+  throw new Error(
+    '🚫 Browser scraping blocked by CORS policy. ' +
+    'Web browsers prevent direct scraping for security. ' +
+    'To get real data: (1) Set up a backend proxy, or (2) Use Khoros API with credentials. ' +
+    'See KHOROS_API_SETUP.md for details.'
+  )
 }
 
 /**

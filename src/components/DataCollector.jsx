@@ -67,7 +67,7 @@ function DataCollector() {
 
   const handleFetchData = async () => {
     setLoading(true)
-    setStatus('Fetching REAL data from comdirect community...')
+    setStatus('Generating demo data with real comdirect topics...')
     
     try {
       const result = await fetchCommunityPosts({
@@ -87,9 +87,9 @@ function DataCollector() {
       
       const sourceInfo = result.source === 'web_scraping' ? '🌐 Real scraped data' : 
                         result.source === 'khoros_api' ? '🔌 API data' : 
-                        '⚠️ Mock data (scraping failed)'
+                        '📋 Demo data (based on real comdirect topics)'
       
-      setStatus(`✅ Successfully collected ${result.posts.length} posts! Source: ${sourceInfo}`)
+      setStatus(`✅ Successfully generated ${result.posts.length} posts! Source: ${sourceInfo}`)
       
       setTimeout(() => setStatus(''), 5000)
     } catch (error) {
@@ -139,6 +139,26 @@ function DataCollector() {
           <span>{status}</span>
         </div>
       )}
+
+      {/* Important Notice */}
+      <div className="card mb-6 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
+        <div className="flex items-start space-x-3">
+          <div className="flex-shrink-0 text-2xl">ℹ️</div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-2">
+              Demo Data Mode
+            </h3>
+            <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+              Currently using realistic <strong>demo data based on actual comdirect community topics</strong>. 
+              Web browsers block direct scraping due to CORS security policies.
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              <strong>To get real data:</strong> Set up a backend proxy or use the Khoros API with credentials. 
+              See <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">KHOROS_API_SETUP.md</code> for details.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Collection Controls */}
       <div className="card mb-8">

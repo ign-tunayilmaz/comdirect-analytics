@@ -18,6 +18,7 @@ function Analytics() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filteredPosts, setFilteredPosts] = useState([])
   const [selectedTopic, setSelectedTopic] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
   const [topics, setTopics] = useState([])
 
   useEffect(() => {
@@ -26,7 +27,7 @@ function Analytics() {
 
   useEffect(() => {
     filterPosts()
-  }, [searchTerm, selectedTopic, posts])
+  }, [searchTerm, selectedTopic, selectedCategory, posts])
 
   const loadData = () => {
     const loadedPosts = loadPosts()
@@ -53,6 +54,12 @@ function Analytics() {
 
     if (selectedTopic) {
       filtered = filtered.filter(post => post.topic === selectedTopic)
+    }
+
+    if (selectedCategory === 'platform') {
+      filtered = filtered.filter(post => post.isPlatformRelated === true)
+    } else if (selectedCategory === 'general') {
+      filtered = filtered.filter(post => post.isPlatformRelated === false)
     }
 
     setFilteredPosts(filtered)
@@ -84,7 +91,7 @@ function Analytics() {
 
       {/* Search and Filter */}
       <div className="card mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Search Posts
@@ -116,6 +123,24 @@ function Analytics() {
                 {topics.map((topic) => (
                   <option key={topic.name} value={topic.name}>{topic.name}</option>
                 ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Filter by Category
+            </label>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+              >
+                <option value="">All Categories</option>
+                <option value="platform">Community Platform Only</option>
+                <option value="general">General Topics Only</option>
               </select>
             </div>
           </div>
@@ -209,6 +234,11 @@ function Analytics() {
                     </span>
                   </div>
                   <div className="flex space-x-2">
+                    {post.isPlatformRelated && (
+                      <span className="px-2 py-1 text-xs rounded-full bg-comdirect-yellow text-comdirect-dark font-semibold">
+                        Platform
+                      </span>
+                    )}
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       post.sentiment === 'positive' 
                         ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'

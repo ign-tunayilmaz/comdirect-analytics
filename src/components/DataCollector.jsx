@@ -9,6 +9,7 @@ function DataCollector() {
   const [filters, setFilters] = useState({
     sentiment: '',
     requestType: '',
+    platformRelated: '',
     limit: 50
   })
 
@@ -21,7 +22,8 @@ function DataCollector() {
         limit: filters.limit,
         filters: {
           sentiment: filters.sentiment || undefined,
-          requestType: filters.requestType || undefined
+          requestType: filters.requestType || undefined,
+          platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true'
         }
       })
       
@@ -82,7 +84,7 @@ function DataCollector() {
       <div className="card mb-8">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Collection Settings</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Sentiment Filter
@@ -115,6 +117,21 @@ function DataCollector() {
               <option value="feedback">Feedback</option>
               <option value="complaint">Complaint</option>
               <option value="praise">Praise</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Category Filter
+            </label>
+            <select
+              value={filters.platformRelated}
+              onChange={(e) => setFilters({ ...filters, platformRelated: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            >
+              <option value="">All Categories</option>
+              <option value="true">Community Platform Only</option>
+              <option value="false">General Topics Only</option>
             </select>
           </div>
 
@@ -182,6 +199,7 @@ function DataCollector() {
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Author</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Topic</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Content</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Category</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Type</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Sentiment</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Engagement</th>
@@ -193,6 +211,17 @@ function DataCollector() {
                     <td className="p-3 text-gray-800 dark:text-gray-200">{post.author}</td>
                     <td className="p-3 text-gray-800 dark:text-gray-200">{post.topic}</td>
                     <td className="p-3 text-gray-600 dark:text-gray-400 max-w-md truncate">{post.content}</td>
+                    <td className="p-3">
+                      {post.isPlatformRelated ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-comdirect-yellow text-comdirect-dark font-semibold">
+                          Platform
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                          General
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3">
                       <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                         {post.requestType.replace(/_/g, ' ')}

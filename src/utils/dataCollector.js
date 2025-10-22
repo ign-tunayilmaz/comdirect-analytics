@@ -14,6 +14,14 @@ export const generateMockPosts = (count = 50) => {
     'Portfolio analysis', 'Market data', 'Trading hours', 'Order types'
   ]
   
+  // Community platform related topics
+  const platformTopics = [
+    'Community forum features', 'Post notifications', 'User profile settings',
+    'Community moderation', 'Forum search functionality', 'Message threading',
+    'Community badges', 'Reputation system', 'Forum mobile app',
+    'Private messaging', 'Topic subscriptions', 'Community guidelines'
+  ]
+  
   const sentiments = ['positive', 'negative', 'neutral']
   const requestTypes = ['feature_request', 'bug_report', 'question', 'feedback', 'complaint', 'praise']
   
@@ -21,7 +29,10 @@ export const generateMockPosts = (count = 50) => {
   const now = new Date()
   
   for (let i = 0; i < count; i++) {
-    const topic = topics[Math.floor(Math.random() * topics.length)]
+    // 30% chance of being a platform-related post
+    const isPlatformRelated = Math.random() < 0.3
+    const topicList = isPlatformRelated ? platformTopics : topics
+    const topic = topicList[Math.floor(Math.random() * topicList.length)]
     const sentiment = sentiments[Math.floor(Math.random() * sentiments.length)]
     const requestType = requestTypes[Math.floor(Math.random() * requestTypes.length)]
     const daysAgo = Math.floor(Math.random() * 90)
@@ -33,6 +44,7 @@ export const generateMockPosts = (count = 50) => {
       content: generatePostContent(topic, requestType),
       sentiment: sentiment,
       requestType: requestType,
+      isPlatformRelated: isPlatformRelated,
       likes: Math.floor(Math.random() * 100),
       replies: Math.floor(Math.random() * 50),
       date: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
@@ -108,6 +120,10 @@ export const fetchCommunityPosts = async (options = {}) => {
   
   if (filters.requestType) {
     posts = posts.filter(post => post.requestType === filters.requestType)
+  }
+  
+  if (filters.platformRelated !== undefined) {
+    posts = posts.filter(post => post.isPlatformRelated === filters.platformRelated)
   }
   
   if (filters.dateFrom) {

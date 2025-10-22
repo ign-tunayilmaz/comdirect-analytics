@@ -7,9 +7,12 @@ import { BarChart3, Database, TrendingUp, Menu, X } from 'lucide-react'
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  
+  // Use base path for GitHub Pages, empty for local dev
+  const basename = import.meta.env.BASE_URL
 
   return (
-    <Router>
+    <Router basename={basename}>
       <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
         {/* Sidebar */}
         <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-comdirect-dark text-white transition-all duration-300 flex flex-col`}>

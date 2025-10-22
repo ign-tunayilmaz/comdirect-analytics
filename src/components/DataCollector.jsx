@@ -67,7 +67,7 @@ function DataCollector() {
 
   const handleFetchData = async () => {
     setLoading(true)
-    setStatus('Fetching community posts...')
+    setStatus('Fetching REAL data from comdirect community...')
     
     try {
       const result = await fetchCommunityPosts({
@@ -84,9 +84,14 @@ function DataCollector() {
       
       const savedPosts = savePosts(result.posts)
       setPosts(savedPosts)
-      setStatus(`Successfully collected ${result.posts.length} posts!`)
       
-      setTimeout(() => setStatus(''), 3000)
+      const sourceInfo = result.source === 'web_scraping' ? '🌐 Real scraped data' : 
+                        result.source === 'khoros_api' ? '🔌 API data' : 
+                        '⚠️ Mock data (scraping failed)'
+      
+      setStatus(`✅ Successfully collected ${result.posts.length} posts! Source: ${sourceInfo}`)
+      
+      setTimeout(() => setStatus(''), 5000)
     } catch (error) {
       setStatus(`Error: ${error.message}`)
     } finally {

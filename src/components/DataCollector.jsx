@@ -10,6 +10,8 @@ function DataCollector() {
     sentiment: '',
     requestType: '',
     platformRelated: '',
+    dateFrom: '',
+    dateTo: '',
     limit: 50
   })
 
@@ -31,6 +33,17 @@ function DataCollector() {
       filtered = filtered.filter(post => post.isPlatformRelated === false)
     }
 
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom)
+      filtered = filtered.filter(post => new Date(post.date) >= fromDate)
+    }
+
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo)
+      toDate.setHours(23, 59, 59, 999) // Include the entire end date
+      filtered = filtered.filter(post => new Date(post.date) <= toDate)
+    }
+
     return filtered
   }
 
@@ -46,7 +59,9 @@ function DataCollector() {
         filters: {
           sentiment: filters.sentiment || undefined,
           requestType: filters.requestType || undefined,
-          platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true'
+          platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
+          dateFrom: filters.dateFrom || undefined,
+          dateTo: filters.dateTo || undefined
         }
       })
       
@@ -107,7 +122,7 @@ function DataCollector() {
       <div className="card mb-8">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Collection Settings</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Sentiment Filter
@@ -156,6 +171,32 @@ function DataCollector() {
               <option value="true">Community Platform Only</option>
               <option value="false">General Topics Only</option>
             </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              From Date
+            </label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              To Date
+            </label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            />
           </div>
 
           <div>

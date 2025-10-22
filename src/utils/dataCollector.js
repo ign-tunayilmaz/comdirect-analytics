@@ -127,7 +127,14 @@ export const fetchCommunityPosts = async (options = {}) => {
   }
   
   if (filters.dateFrom) {
-    posts = posts.filter(post => new Date(post.date) >= new Date(filters.dateFrom))
+    const fromDate = new Date(filters.dateFrom)
+    posts = posts.filter(post => new Date(post.date) >= fromDate)
+  }
+  
+  if (filters.dateTo) {
+    const toDate = new Date(filters.dateTo)
+    toDate.setHours(23, 59, 59, 999) // Include the entire end date
+    posts = posts.filter(post => new Date(post.date) <= toDate)
   }
   
   return {

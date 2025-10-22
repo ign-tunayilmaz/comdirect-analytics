@@ -1,6 +1,7 @@
 // Data collection and scraping utilities
 import axios from 'axios'
-import { scrapeComdirectPosts } from './communityScraper'
+// Note: Browser-based scraping is disabled due to CORS restrictions
+// import { scrapeComdirectPosts } from './communityScraper'
 
 /**
  * Mock data generator for demonstration purposes
@@ -164,72 +165,55 @@ const generateTags = (topic, requestType) => {
 }
 
 /**
- * Fetch real posts from comdirect community via web scraping
+ * Fetch community posts (using demo data due to browser CORS limitations)
  */
 export const fetchCommunityPosts = async (options = {}) => {
   const { page = 1, limit = 50, filters = {} } = options
   
-  try {
-    console.log('🌐 Fetching REAL data from comdirect community...')
-    
-    // Scrape real posts from comdirect community
-    const result = await scrapeComdirectPosts({
-      limit,
-      filters
-    })
-    
-    console.log(`✅ Successfully fetched ${result.posts.length} real posts`)
-    
-    return {
-      posts: result.posts,
-      total: result.posts.length,
-      page,
-      hasMore: false,
-      source: result.source
-    }
-    
-  } catch (error) {
-    console.error('❌ Error fetching real data:', error.message)
-    console.warn('⚠️ Falling back to mock data due to error')
-    
-    // Fallback to mock data only if scraping fails
-    let posts = generateMockPosts(limit)
-    
-    // Apply filters
-    if (filters.sentiment) {
-      posts = posts.filter(post => post.sentiment === filters.sentiment)
-    }
-    
-    if (filters.requestType) {
-      posts = posts.filter(post => post.requestType === filters.requestType)
-    }
-    
-    if (filters.platformRelated !== undefined) {
-      posts = posts.filter(post => post.isPlatformRelated === filters.platformRelated)
-    }
-    
-    if (filters.language) {
-      posts = posts.filter(post => post.contentLanguage === filters.language)
-    }
-    
-    if (filters.dateFrom) {
-      const fromDate = new Date(filters.dateFrom)
-      posts = posts.filter(post => new Date(post.date) >= fromDate)
-    }
-    
-    if (filters.dateTo) {
-      const toDate = new Date(filters.dateTo)
-      toDate.setHours(23, 59, 59, 999)
-      posts = posts.filter(post => new Date(post.date) <= toDate)
-    }
-    
-    return {
-      posts,
-      total: posts.length,
-      page,
-      hasMore: false,
-      source: 'mock_data_fallback'
-    }
+  // Note: Direct scraping is blocked by CORS in browsers
+  // Using realistic demo data based on actual comdirect community topics
+  console.log('📋 Generating demo data based on real comdirect topics...')
+  
+  // Simulate API delay for realistic feel
+  await new Promise(resolve => setTimeout(resolve, 300))
+  
+  // Generate demo posts
+  let posts = generateMockPosts(limit)
+  
+  // Apply filters
+  if (filters.sentiment) {
+    posts = posts.filter(post => post.sentiment === filters.sentiment)
+  }
+  
+  if (filters.requestType) {
+    posts = posts.filter(post => post.requestType === filters.requestType)
+  }
+  
+  if (filters.platformRelated !== undefined) {
+    posts = posts.filter(post => post.isPlatformRelated === filters.platformRelated)
+  }
+  
+  if (filters.language) {
+    posts = posts.filter(post => post.contentLanguage === filters.language)
+  }
+  
+  if (filters.dateFrom) {
+    const fromDate = new Date(filters.dateFrom)
+    posts = posts.filter(post => new Date(post.date) >= fromDate)
+  }
+  
+  if (filters.dateTo) {
+    const toDate = new Date(filters.dateTo)
+    toDate.setHours(23, 59, 59, 999)
+    posts = posts.filter(post => new Date(post.date) <= toDate)
+  }
+  
+  return {
+    posts,
+    total: posts.length,
+    page,
+    hasMore: false,
+    source: 'demo_data'
   }
 }
 

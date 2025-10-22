@@ -87,6 +87,7 @@ function DataCollector() {
       
       const sourceInfo = result.source === 'web_scraping' ? '🌐 Real scraped data' : 
                         result.source === 'khoros_api' ? '🔌 API data' : 
+                        result.source === 'demo_data' ? '📋 Demo data (real topics)' :
                         '📋 Demo data (based on real comdirect topics)'
       
       setStatus(`✅ Successfully generated ${result.posts.length} posts! Source: ${sourceInfo}`)

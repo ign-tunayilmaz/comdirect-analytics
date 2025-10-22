@@ -1,0 +1,232 @@
+import React, { useState } from 'react'
+import { fetchCommunityPosts, savePosts, loadPosts, clearPosts } from '../utils/dataCollector'
+import { Download, RefreshCw, Trash2, CheckCircle, AlertCircle } from 'lucide-react'
+
+function DataCollector() {
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState('')
+  const [posts, setPosts] = useState(loadPosts())
+  const [filters, setFilters] = useState({
+    sentiment: '',
+    requestType: '',
+    limit: 50
+  })
+
+  const handleFetchData = async () => {
+    setLoading(true)
+    setStatus('Fetching community posts...')
+    
+    try {
+      const result = await fetchCommunityPosts({
+        limit: filters.limit,
+        filters: {
+          sentiment: filters.sentiment || undefined,
+          requestType: filters.requestType || undefined
+        }
+      })
+      
+      const savedPosts = savePosts(result.posts)
+      setPosts(savedPosts)
+      setStatus(`Successfully collected ${result.posts.length} posts!`)
+      
+      setTimeout(() => setStatus(''), 3000)
+    } catch (error) {
+      setStatus(`Error: ${error.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClearData = () => {
+    if (window.confirm('Are you sure you want to clear all collected data?')) {
+      clearPosts()
+      setPosts([])
+      setStatus('All data cleared.')
+      setTimeout(() => setStatus(''), 3000)
+    }
+  }
+
+  const handleExportData = () => {
+    const dataStr = JSON.stringify(posts, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `comdirect_posts_${new Date().toISOString().split('T')[0]}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    setStatus('Data exported successfully!')
+    setTimeout(() => setStatus(''), 3000)
+  }
+
+  return (
+    <div className="p-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">Data Collector</h1>
+        <p className="text-gray-600 dark:text-gray-400">Collect and manage community posts for analysis</p>
+      </div>
+
+      {/* Status Message */}
+      {status && (
+        <div className={`mb-6 p-4 rounded-lg flex items-center space-x-3 ${
+          status.includes('Error') 
+            ? 'bg-red-50 border border-red-200 text-red-700 dark:bg-red-900/20' 
+            : 'bg-green-50 border border-green-200 text-green-700 dark:bg-green-900/20'
+        }`}>
+          {status.includes('Error') ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
+          <span>{status}</span>
+        </div>
+      )}
+
+      {/* Collection Controls */}
+      <div className="card mb-8">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Collection Settings</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Sentiment Filter
+            </label>
+            <select
+              value={filters.sentiment}
+              onChange={(e) => setFilters({ ...filters, sentiment: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            >
+              <option value="">All Sentiments</option>
+              <option value="positive">Positive</option>
+              <option value="negative">Negative</option>
+              <option value="neutral">Neutral</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Request Type Filter
+            </label>
+            <select
+              value={filters.requestType}
+              onChange={(e) => setFilters({ ...filters, requestType: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            >
+              <option value="">All Types</option>
+              <option value="feature_request">Feature Request</option>
+              <option value="bug_report">Bug Report</option>
+              <option value="question">Question</option>
+              <option value="feedback">Feedback</option>
+              <option value="complaint">Complaint</option>
+              <option value="praise">Praise</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Posts to Collect
+            </label>
+            <input
+              type="number"
+              value={filters.limit}
+              onChange={(e) => setFilters({ ...filters, limit: parseInt(e.target.value) })}
+              min="10"
+              max="500"
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleFetchData}
+            disabled={loading}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+            <span>{loading ? 'Collecting...' : 'Collect Posts'}</span>
+          </button>
+
+          <button
+            onClick={handleExportData}
+            disabled={posts.length === 0}
+            className="btn-secondary flex items-center space-x-2"
+          >
+            <Download size={20} />
+            <span>Export Data</span>
+          </button>
+
+          <button
+            onClick={handleClearData}
+            disabled={posts.length === 0}
+            className="bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 transition-colors duration-200 flex items-center space-x-2"
+          >
+            <Trash2 size={20} />
+            <span>Clear All</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Data Overview */}
+      <div className="card">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
+          Collected Data ({posts.length} posts)
+        </h2>
+        
+        {posts.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500 dark:text-gray-400 mb-4">No posts collected yet.</p>
+            <p className="text-sm text-gray-400">Click "Collect Posts" to start gathering data.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Author</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Topic</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Content</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Type</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Sentiment</th>
+                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Engagement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posts.slice(0, 20).map((post) => (
+                  <tr key={post.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="p-3 text-gray-800 dark:text-gray-200">{post.author}</td>
+                    <td className="p-3 text-gray-800 dark:text-gray-200">{post.topic}</td>
+                    <td className="p-3 text-gray-600 dark:text-gray-400 max-w-md truncate">{post.content}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                        {post.requestType.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        post.sentiment === 'positive' 
+                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                          : post.sentiment === 'negative'
+                          ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                      }`}>
+                        {post.sentiment}
+                      </span>
+                    </td>
+                    <td className="p-3 text-gray-600 dark:text-gray-400">
+                      {post.likes} likes, {post.replies} replies
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {posts.length > 20 && (
+              <p className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+                Showing 20 of {posts.length} posts. Export data to view all.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default DataCollector
+

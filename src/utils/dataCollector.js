@@ -167,6 +167,10 @@ export const fetchCommunityPosts = async (options = {}) => {
     posts = posts.filter(post => post.isPlatformRelated === filters.platformRelated)
   }
   
+  if (filters.language) {
+    posts = posts.filter(post => post.contentLanguage === filters.language)
+  }
+  
   if (filters.dateFrom) {
     const fromDate = new Date(filters.dateFrom)
     posts = posts.filter(post => new Date(post.date) >= fromDate)

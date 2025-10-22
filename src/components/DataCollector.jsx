@@ -11,6 +11,7 @@ function DataCollector() {
     sentiment: '',
     requestType: '',
     platformRelated: '',
+    language: '',
     dateFrom: '',
     dateTo: '',
     limit: 50
@@ -44,6 +45,10 @@ function DataCollector() {
       filtered = filtered.filter(post => post.isPlatformRelated === false)
     }
 
+    if (filters.language) {
+      filtered = filtered.filter(post => post.contentLanguage === filters.language)
+    }
+
     if (filters.dateFrom) {
       const fromDate = new Date(filters.dateFrom)
       filtered = filtered.filter(post => new Date(post.date) >= fromDate)
@@ -71,6 +76,7 @@ function DataCollector() {
           sentiment: filters.sentiment || undefined,
           requestType: filters.requestType || undefined,
           platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
+          language: filters.language || undefined,
           dateFrom: filters.dateFrom || undefined,
           dateTo: filters.dateTo || undefined
         }
@@ -133,7 +139,7 @@ function DataCollector() {
       <div className="card mb-8">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Collection Settings</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Sentiment Filter
@@ -181,6 +187,21 @@ function DataCollector() {
               <option value="">All Categories</option>
               <option value="true">Community Platform Only</option>
               <option value="false">General Topics Only</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Language Filter
+            </label>
+            <select
+              value={filters.language}
+              onChange={(e) => setFilters({ ...filters, language: e.target.value })}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+            >
+              <option value="">All Languages</option>
+              <option value="de">🇩🇪 German (Deutsch)</option>
+              <option value="en">🇬🇧 English</option>
             </select>
           </div>
         </div>
@@ -377,16 +398,23 @@ function DataCollector() {
                       </td>
                       <td className="p-3">
                         {post.url ? (
-                          <a 
-                            href={post.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-comdirect-blue hover:bg-comdirect-yellow text-white hover:text-comdirect-dark transition-all duration-200 font-medium text-xs"
-                          >
-                            <ExternalLink size={14} />
-                            <span>View Post</span>
-                          </a>
+                          <div className="relative group">
+                            <a 
+                              href={post.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-comdirect-blue hover:bg-comdirect-yellow text-white hover:text-comdirect-dark transition-all duration-200 font-medium text-xs"
+                              title="Demo link - Will show 404 for mock data"
+                            >
+                              <ExternalLink size={14} />
+                              <span>View Post</span>
+                            </a>
+                            <div className="hidden group-hover:block absolute bottom-full mb-2 left-0 z-10 px-3 py-2 text-xs text-white bg-gray-900 rounded-lg shadow-lg whitespace-nowrap">
+                              ⚠️ Demo link - Use real API for working links
+                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                            </div>
+                          </div>
                         ) : (
                           <span className="text-gray-400 text-xs">No link</span>
                         )}

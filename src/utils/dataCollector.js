@@ -156,11 +156,42 @@ export const savePosts = (posts) => {
 }
 
 /**
+ * Migrate old posts to include isPlatformRelated field
+ */
+const migratePosts = (posts) => {
+  const platformTopics = [
+    'Community forum features', 'Post notifications', 'User profile settings',
+    'Community moderation', 'Forum search functionality', 'Message threading',
+    'Community badges', 'Reputation system', 'Forum mobile app',
+    'Private messaging', 'Topic subscriptions', 'Community guidelines'
+  ]
+  
+  return posts.map(post => {
+    // If the post doesn't have isPlatformRelated field, add it based on topic
+    if (post.isPlatformRelated === undefined) {
+      return {
+        ...post,
+        isPlatformRelated: platformTopics.includes(post.topic)
+      }
+    }
+    return post
+  })
+}
+
+/**
  * Load posts from local storage
  */
 export const loadPosts = () => {
   try {
-    return JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
+    const posts = JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
+    const migratedPosts = migratePosts(posts)
+    
+    // Save migrated posts back to localStorage
+    if (migratedPosts.length > 0 && migratedPosts.some(p => p.isPlatformRelated === undefined)) {
+      localStorage.setItem('comdirect_posts', JSON.stringify(migratedPosts))
+    }
+    
+    return migratedPosts
   } catch (error) {
     console.error('Error loading posts:', error)
     return []

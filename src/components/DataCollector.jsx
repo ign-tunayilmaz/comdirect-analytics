@@ -13,6 +13,29 @@ function DataCollector() {
     limit: 50
   })
 
+  // Filter posts for display based on current filter settings
+  const getFilteredPostsForDisplay = () => {
+    let filtered = posts
+
+    if (filters.sentiment) {
+      filtered = filtered.filter(post => post.sentiment === filters.sentiment)
+    }
+
+    if (filters.requestType) {
+      filtered = filtered.filter(post => post.requestType === filters.requestType)
+    }
+
+    if (filters.platformRelated === 'true') {
+      filtered = filtered.filter(post => post.isPlatformRelated === true)
+    } else if (filters.platformRelated === 'false') {
+      filtered = filtered.filter(post => post.isPlatformRelated === false)
+    }
+
+    return filtered
+  }
+
+  const displayedPosts = getFilteredPostsForDisplay()
+
   const handleFetchData = async () => {
     setLoading(true)
     setStatus('Fetching community posts...')
@@ -183,13 +206,23 @@ function DataCollector() {
       {/* Data Overview */}
       <div className="card">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
-          Collected Data ({posts.length} posts)
+          Collected Data ({displayedPosts.length} posts)
+          {displayedPosts.length !== posts.length && (
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
+              (filtered from {posts.length} total)
+            </span>
+          )}
         </h2>
         
         {posts.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 dark:text-gray-400 mb-4">No posts collected yet.</p>
             <p className="text-sm text-gray-400">Click "Collect Posts" to start gathering data.</p>
+          </div>
+        ) : displayedPosts.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500 dark:text-gray-400 mb-4">No posts match the current filters.</p>
+            <p className="text-sm text-gray-400">Try adjusting your filter settings or collect new posts.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -206,7 +239,7 @@ function DataCollector() {
                 </tr>
               </thead>
               <tbody>
-                {posts.slice(0, 20).map((post) => (
+                {displayedPosts.slice(0, 20).map((post) => (
                   <tr key={post.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="p-3 text-gray-800 dark:text-gray-200">{post.author}</td>
                     <td className="p-3 text-gray-800 dark:text-gray-200">{post.topic}</td>
@@ -245,9 +278,9 @@ function DataCollector() {
                 ))}
               </tbody>
             </table>
-            {posts.length > 20 && (
+            {displayedPosts.length > 20 && (
               <p className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
-                Showing 20 of {posts.length} posts. Export data to view all.
+                Showing 20 of {displayedPosts.length} filtered posts. Export data to view all.
               </p>
             )}
           </div>

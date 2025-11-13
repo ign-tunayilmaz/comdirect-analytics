@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { fetchCommunityPosts, savePosts, loadPosts, clearPosts } from '../utils/dataCollector'
+import { isApiConfigured } from '../utils/khorosApi'
 import { Download, RefreshCw, Trash2, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react'
 
 function DataCollector() {
@@ -7,15 +8,40 @@ function DataCollector() {
   const [status, setStatus] = useState('')
   const [posts, setPosts] = useState(loadPosts())
   const [expandedRows, setExpandedRows] = useState(new Set())
+  const [apiConfigured, setApiConfigured] = useState(false)
+  // Calculate default date range (last 7 days - Khoros API limit)
+  const getDefaultDates = () => {
+    const today = new Date()
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+    return {
+      dateFrom: sevenDaysAgo.toISOString().split('T')[0],
+      dateTo: today.toISOString().split('T')[0]
+    }
+  }
+
+  const defaultDates = getDefaultDates()
+
   const [filters, setFilters] = useState({
     sentiment: '',
     requestType: '',
     platformRelated: '',
     language: '',
-    dateFrom: '',
-    dateTo: '',
+    dateFrom: defaultDates.dateFrom,
+    dateTo: defaultDates.dateTo,
     limit: 50
   })
+
+  // Check API configuration on mount
+  useEffect(() => {
+    const configured = isApiConfigured()
+    setApiConfigured(configured)
+    
+    // Debug logging
+    console.log('🔍 Environment Variables Check:')
+    console.log('   Community ID:', import.meta.env.VITE_KHOROS_COMMUNITY_ID || '❌ NOT SET')
+    console.log('   Has Access Token:', import.meta.env.VITE_KHOROS_ACCESS_TOKEN ? '✅ YES' : '❌ NO')
+    console.log('   API Configured:', configured ? '✅ YES' : '❌ NO')
+  }, [])
 
   const toggleRowExpansion = (postId) => {
     const newExpanded = new Set(expandedRows)
@@ -66,8 +92,25 @@ function DataCollector() {
   const displayedPosts = getFilteredPostsForDisplay()
 
   const handleFetchData = async () => {
+    // Validate date range (Khoros API allows maximum 7 days)
+    if (filters.dateFrom && filters.dateTo) {
+      const fromDate = new Date(filters.dateFrom)
+      const toDate = new Date(filters.dateTo)
+      const daysDiff = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24))
+      
+      if (daysDiff > 7) {
+        setStatus('❌ Error: Khoros API allows maximum 7 days per request. Please select a shorter date range.')
+        return
+      }
+      
+      if (daysDiff < 0) {
+        setStatus('❌ Error: "From Date" must be before "To Date".')
+        return
+      }
+    }
+    
     setLoading(true)
-    setStatus('Generating demo data with real comdirect topics...')
+    setStatus('🔌 Connecting to Khoros API...')
     
     try {
       const result = await fetchCommunityPosts({
@@ -85,16 +128,24 @@ function DataCollector() {
       const savedPosts = savePosts(result.posts)
       setPosts(savedPosts)
       
-      const sourceInfo = result.source === 'web_scraping' ? '🌐 Real scraped data' : 
-                        result.source === 'khoros_api' ? '🔌 API data' : 
-                        result.source === 'demo_data' ? '📋 Demo data (real topics)' :
-                        '📋 Demo data (based on real comdirect topics)'
-      
-      setStatus(`✅ Successfully generated ${result.posts.length} posts! Source: ${sourceInfo}`)
+      setStatus(`✅ Successfully fetched ${result.posts.length} real posts from Khoros API!`)
       
       setTimeout(() => setStatus(''), 5000)
     } catch (error) {
-      setStatus(`Error: ${error.message}`)
+      console.error('❌ Collection Error:', error)
+      
+      // Provide helpful error messages based on error type
+      let errorMessage = error.message
+      
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        errorMessage = '❌ CORS Error: Browser blocked the API request. The Khoros API at community.comdirect.de does not allow direct browser access. Solutions: 1) Set up a backend proxy server, 2) Contact Khoros support to enable CORS for your domain, 3) Use Khoros Community API with proper authentication.'
+      } else if (error.message.includes('401') || error.message.includes('403')) {
+        errorMessage = '❌ Authentication Error: Your API credentials may be invalid or expired. Please check your access token in .env.local'
+      } else if (error.message.includes('404')) {
+        errorMessage = '❌ API Endpoint Not Found: The API URL may be incorrect. Please verify the community domain and API path.'
+      }
+      
+      setStatus(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -141,25 +192,48 @@ function DataCollector() {
         </div>
       )}
 
-      {/* Important Notice */}
-      <div className="card mb-6 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
-        <div className="flex items-start space-x-3">
-          <div className="flex-shrink-0 text-2xl">ℹ️</div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-2">
-              Demo Data Mode
-            </h3>
-            <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
-              Currently using realistic <strong>demo data based on actual comdirect community topics</strong>. 
-              Web browsers block direct scraping due to CORS security policies.
-            </p>
-            <p className="text-xs text-blue-700 dark:text-blue-300">
-              <strong>To get real data:</strong> Set up a backend proxy or use the Khoros API with credentials. 
-              See <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">KHOROS_API_SETUP.md</code> for details.
-            </p>
+      {/* API Status Notice */}
+      {apiConfigured ? (
+        <div className="card mb-6 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0 text-2xl">✅</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-green-900 dark:text-green-100 mb-2">
+                Khoros API Connected
+              </h3>
+              <p className="text-sm text-green-800 dark:text-green-200 mb-2">
+                Successfully connected to <strong>Khoros LSI Data Export API</strong> for comdirectbank.prod. 
+                Ready to fetch real community data!
+              </p>
+              <p className="text-xs text-green-700 dark:text-green-300">
+                📡 Using credentials from <code className="bg-green-100 dark:bg-green-800 px-1 rounded">.env.local</code>. 
+                Endpoint: <code className="bg-green-100 dark:bg-green-800 px-1 rounded">eu.api.lithium.com/lsi-data/v1</code>
+              </p>
+              <p className="text-xs text-orange-700 dark:text-orange-300 mt-2">
+                ⚠️ <strong>Note:</strong> Khoros API allows maximum 7 days per request. For larger date ranges, make multiple requests.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="card mb-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0 text-2xl">❌</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 dark:text-red-100 mb-2">
+                API Not Configured
+              </h3>
+              <p className="text-sm text-red-800 dark:text-red-200 mb-2">
+                Khoros API credentials not found. The application requires valid API credentials to fetch community data.
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                <strong>Required:</strong> Add your Khoros API credentials to <code className="bg-red-100 dark:bg-red-800 px-1 rounded">.env.local</code>. 
+                See <code className="bg-red-100 dark:bg-red-800 px-1 rounded">KHOROS_API_SETUP.md</code> for setup instructions.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Collection Controls */}
       <div className="card mb-8">
@@ -232,7 +306,7 @@ function DataCollector() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               From Date
@@ -270,6 +344,16 @@ function DataCollector() {
               className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
             />
           </div>
+        </div>
+
+        <div className="mb-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            ⚠️ <strong>API Limit:</strong> Maximum 7 days per request. Current range: {
+              filters.dateFrom && filters.dateTo 
+                ? `${Math.ceil((new Date(filters.dateTo) - new Date(filters.dateFrom)) / (1000 * 60 * 60 * 24))} days`
+                : 'Not selected'
+            }
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -431,15 +515,17 @@ function DataCollector() {
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-comdirect-blue hover:bg-comdirect-yellow text-white hover:text-comdirect-dark transition-all duration-200 font-medium text-xs"
-                              title="Demo link - Will show 404 for mock data"
+                              title={apiConfigured ? "View post in community" : "Demo link - may not work"}
                             >
                               <ExternalLink size={14} />
                               <span>View Post</span>
                             </a>
-                            <div className="hidden group-hover:block absolute bottom-full mb-2 left-0 z-10 px-3 py-2 text-xs text-white bg-gray-900 rounded-lg shadow-lg whitespace-nowrap">
-                              ⚠️ Demo link - Use real API for working links
-                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                            </div>
+                            {!apiConfigured && (
+                              <div className="hidden group-hover:block absolute bottom-full mb-2 left-0 z-10 px-3 py-2 text-xs text-white bg-gray-900 rounded-lg shadow-lg whitespace-nowrap">
+                                ⚠️ Demo link - Use real API for working links
+                                <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-gray-400 text-xs">No link</span>

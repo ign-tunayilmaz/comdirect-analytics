@@ -1,5 +1,6 @@
 // Data collection and scraping utilities
 import axios from 'axios'
+import { fetchPostsFromKhorosAPI, isApiConfigured } from './khorosApi'
 // Note: Browser-based scraping is disabled due to CORS restrictions
 // import { scrapeComdirectPosts } from './communityScraper'
 
@@ -165,55 +166,45 @@ const generateTags = (topic, requestType) => {
 }
 
 /**
- * Fetch community posts (using demo data due to browser CORS limitations)
+ * Fetch community posts (ONLY from Khoros API - NO DEMO DATA)
  */
 export const fetchCommunityPosts = async (options = {}) => {
   const { page = 1, limit = 50, filters = {} } = options
   
-  // Note: Direct scraping is blocked by CORS in browsers
-  // Using realistic demo data based on actual comdirect community topics
-  console.log('📋 Generating demo data based on real comdirect topics...')
-  
-  // Simulate API delay for realistic feel
-  await new Promise(resolve => setTimeout(resolve, 300))
-  
-  // Generate demo posts
-  let posts = generateMockPosts(limit)
-  
-  // Apply filters
-  if (filters.sentiment) {
-    posts = posts.filter(post => post.sentiment === filters.sentiment)
+  // Check if Khoros API is configured
+  if (!isApiConfigured()) {
+    throw new Error('❌ Khoros API is not configured. Please add your API credentials to .env.local file.')
   }
+  
+  console.log('🔌 Khoros API is configured - fetching real data...')
+  
+  // Fetch real data from Khoros API - NO FALLBACK TO DEMO DATA
+  const posts = await fetchPostsFromKhorosAPI({
+    startDate: filters.dateFrom,
+    endDate: filters.dateTo,
+    limit: limit,
+    category: filters.platformRelated !== undefined ? 
+      (filters.platformRelated ? 'community-feedback' : null) : null,
+    sentiment: filters.sentiment,
+  })
+  
+  // Apply additional client-side filters
+  let filteredPosts = posts
   
   if (filters.requestType) {
-    posts = posts.filter(post => post.requestType === filters.requestType)
-  }
-  
-  if (filters.platformRelated !== undefined) {
-    posts = posts.filter(post => post.isPlatformRelated === filters.platformRelated)
+    filteredPosts = filteredPosts.filter(post => post.requestType === filters.requestType)
   }
   
   if (filters.language) {
-    posts = posts.filter(post => post.contentLanguage === filters.language)
-  }
-  
-  if (filters.dateFrom) {
-    const fromDate = new Date(filters.dateFrom)
-    posts = posts.filter(post => new Date(post.date) >= fromDate)
-  }
-  
-  if (filters.dateTo) {
-    const toDate = new Date(filters.dateTo)
-    toDate.setHours(23, 59, 59, 999)
-    posts = posts.filter(post => new Date(post.date) <= toDate)
+    filteredPosts = filteredPosts.filter(post => post.contentLanguage === filters.language)
   }
   
   return {
-    posts,
-    total: posts.length,
+    posts: filteredPosts,
+    total: filteredPosts.length,
     page,
     hasMore: false,
-    source: 'demo_data'
+    source: 'khoros_api'
   }
 }
 

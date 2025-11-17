@@ -55,7 +55,7 @@ function App() {
           {isSidebarOpen && (
             <div className="p-4 border-t border-gray-700">
               <p className="text-xs text-gray-400">Community Insights Tool</p>
-              <p className="text-xs text-gray-500 mt-1">v1.0.0</p>
+           <p className="text-xs text-gray-500 mt-1">v1.0.2</p>
             </div>
           )}
         </aside>

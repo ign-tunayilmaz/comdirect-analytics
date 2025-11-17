@@ -1,12 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: '/comdirect-analytics/',
+  // Use '/' for development, '/comdirect-analytics/' for production (GitHub Pages)
+  base: command === 'serve' ? '/' : '/comdirect-analytics/',
   server: {
-    port: 3000,
+    port: 5173,
     open: true
   }
-})
+}))
 

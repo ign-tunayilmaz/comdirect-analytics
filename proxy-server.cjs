@@ -29,6 +29,7 @@ const KHOROS_CONFIG = {
   accessToken: '6d100a667bbc8a27e9d6e8b773b9e02d2400d21e',
   baseUrl: 'https://eu.api.lithium.com/lsi-data/v1/data/export/community'
 };
+const LIQL_ENDPOINT = 'https://community.comdirect.de/api/2.0/search';
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -95,6 +96,16 @@ app.get('/api/khoros/posts', async (req, res) => {
     // Parse CSV into structured records
     const lines = csvData.split('\n').filter(line => line.trim());
     console.log(`📝 Total CSV lines (including header): ${lines.length}`);
+    
+    // Log the CSV header for debugging
+    if (lines.length > 0) {
+      console.log(`📋 CSV Header:\n${lines[0].substring(0, 500)}...`);
+    }
+    
+    // Log a sample data line
+    if (lines.length > 1) {
+      console.log(`📋 Sample Data Line 1:\n${lines[1].substring(0, 500)}...`);
+    }
     
     // Skip the first line (CSV header row)
     const dataLines = lines.slice(1);
@@ -182,6 +193,75 @@ app.get('/api/khoros/posts', async (req, res) => {
     res.status(500).json({ 
       error: 'Proxy server error', 
       message: error.message 
+    });
+  }
+});
+
+const sanitizeIds = (ids = []) => {
+  const unique = new Set();
+  ids.forEach(id => {
+    if (id === null || id === undefined) return;
+    const trimmed = String(id).trim();
+    if (trimmed !== '') {
+      unique.add(trimmed.replace(/'/g, "\\'"));
+    }
+  });
+  return Array.from(unique);
+};
+
+const chunkArray = (items, size) => {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
+const fetchMessageBatchFromLiql = async (ids = []) => {
+  if (ids.length === 0) return [];
+  const quotedIds = ids.map(id => `'${id}'`).join(',');
+  const liql = `SELECT id, subject, body, post_time, author.login, view_href FROM messages WHERE id IN (${quotedIds})`;
+  const url = `${LIQL_ENDPOINT}?q=${encodeURIComponent(liql)}&restapi.format=json`;
+
+  const response = await axios.get(url, {
+    headers: {
+      'Accept': 'application/json'
+    },
+    validateStatus: status => status >= 200 && status < 500
+  });
+
+  if (response.status !== 200) {
+    throw new Error(`LiQL error: ${response.status} ${response.statusText}`);
+  }
+
+  return response.data?.data?.items || [];
+};
+
+app.post('/api/khoros/messages/details', async (req, res) => {
+  try {
+    const messageIds = sanitizeIds(req.body?.messageIds || []);
+    
+    if (messageIds.length === 0) {
+      return res.status(400).json({
+        error: 'Missing messageIds array'
+      });
+    }
+
+    const MAX_BATCH = 20;
+    const batches = chunkArray(messageIds, MAX_BATCH);
+    const items = [];
+
+    for (const batch of batches) {
+      const batchItems = await fetchMessageBatchFromLiql(batch);
+      items.push(...batchItems);
+    }
+
+    res.json({ items });
+  } catch (error) {
+    console.error('❌ Message details fetch error:', error.response?.data || error.message);
+    res.status(500).json({
+      error: 'Failed to fetch message details',
+      details: error.response?.data || error.message
     });
   }
 });

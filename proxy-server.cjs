@@ -5,12 +5,18 @@
  * to bypass CORS restrictions in the browser.
  * 
  * Usage:
- *   1. Install dependencies: npm install express cors axios
- *   2. Run this server: node proxy-server.cjs
- *   3. Server runs on http://localhost:3001
+ *   1. Install dependencies: npm install express cors axios dotenv
+ *   2. Create .env file with your credentials (see README_SECURITY.md)
+ *   3. Run this server: node proxy-server.cjs
+ *   4. Server runs on http://localhost:3001
  *   
  * Note: Uses axios for HTTP requests (CommonJS compatible)
+ * 
+ * SECURITY: Never commit credentials to git! Use environment variables.
  */
+
+// Load environment variables from .env file
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -23,13 +29,41 @@ app.use(cors());
 app.use(express.json());
 
 // Khoros API Configuration
+// IMPORTANT: Use environment variables for credentials!
+// Set these in your environment or .env file:
+//   KHOROS_COMMUNITY_ID=comdirectbank.prod
+//   KHOROS_CLIENT_ID=your_client_id_here
+//   KHOROS_ACCESS_TOKEN=your_access_token_here
 const KHOROS_CONFIG = {
-  communityId: 'comdirectbank.prod',
-  clientId: '9De3u/U+HGfQlpMxqsnBxukwCvWYr+j+aHI4rSu/wEo=',
-  accessToken: '6d100a667bbc8a27e9d6e8b773b9e02d2400d21e',
+  communityId: process.env.KHOROS_COMMUNITY_ID || 'comdirectbank.prod',
+  clientId: process.env.KHOROS_CLIENT_ID || '',
+  accessToken: process.env.KHOROS_ACCESS_TOKEN || '',
   baseUrl: 'https://eu.api.lithium.com/lsi-data/v1/data/export/community'
 };
+
+// Validate that credentials are provided
+if (!KHOROS_CONFIG.clientId || !KHOROS_CONFIG.accessToken) {
+  console.error('❌ ERROR: Khoros API credentials not found!');
+  console.error('   Please set KHOROS_CLIENT_ID and KHOROS_ACCESS_TOKEN environment variables.');
+  console.error('   Or create a .env file with these values.');
+  process.exit(1);
+}
 const LIQL_ENDPOINT = 'https://community.comdirect.de/api/2.0/search';
+
+// Root endpoint - API information
+app.get('/', (req, res) => {
+  res.json({
+    service: 'Khoros API Proxy Server',
+    status: 'running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      posts: '/api/khoros/posts?fromDate=YYYYMMDD&toDate=YYYYMMDD',
+      messageDetails: '/api/khoros/messages/details (POST)'
+    },
+    example: `http://localhost:${process.env.PORT || 3001}/api/khoros/posts?fromDate=20251101&toDate=20251113`
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -220,7 +254,7 @@ const chunkArray = (items, size) => {
 const fetchMessageBatchFromLiql = async (ids = []) => {
   if (ids.length === 0) return [];
   const quotedIds = ids.map(id => `'${id}'`).join(',');
-  const liql = `SELECT id, subject, body, post_time, author.login, view_href FROM messages WHERE id IN (${quotedIds})`;
+  const liql = `SELECT id, subject, body, post_time, author.login, view_href, kudos.sum(weight) as kudos_weight, replies.count(*) as replies_count, view_count FROM messages WHERE id IN (${quotedIds})`;
   const url = `${LIQL_ENDPOINT}?q=${encodeURIComponent(liql)}&restapi.format=json`;
 
   const response = await axios.get(url, {

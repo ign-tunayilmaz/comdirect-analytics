@@ -150,24 +150,6 @@ function Analytics() {
         </p>
       </div>
 
-      {/* Trends Over Time */}
-      {trends.length > 0 && (
-        <div className="card mb-8">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Sentiment Trends Over Time</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={trends}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="positive" stroke="#4ECDC4" name="Positive" strokeWidth={2} />
-              <Line type="monotone" dataKey="negative" stroke="#FF6B6B" name="Negative" strokeWidth={2} />
-              <Line type="monotone" dataKey="neutral" stroke="#95A5A6" name="Neutral" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       {/* Common Issues */}
       {commonIssues.length > 0 && (
@@ -239,15 +221,6 @@ function Analytics() {
                         Platform
                       </span>
                     )}
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      post.sentiment === 'positive' 
-                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                        : post.sentiment === 'negative'
-                        ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                    }`}>
-                      {post.sentiment}
-                    </span>
                   </div>
                 </div>
                 <p className="text-gray-700 dark:text-gray-300 mb-2">{post.content}</p>

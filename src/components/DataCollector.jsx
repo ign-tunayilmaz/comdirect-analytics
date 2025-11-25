@@ -22,7 +22,6 @@ function DataCollector() {
   const defaultDates = getDefaultDates()
 
   const [filters, setFilters] = useState({
-    sentiment: '',
     requestType: '',
     platformRelated: '',
     language: '',
@@ -57,10 +56,6 @@ function DataCollector() {
   const getFilteredPostsForDisplay = () => {
     let filtered = posts
 
-    if (filters.sentiment) {
-      filtered = filtered.filter(post => post.sentiment === filters.sentiment)
-    }
-
     if (filters.requestType) {
       filtered = filtered.filter(post => post.requestType === filters.requestType)
     }
@@ -92,45 +87,98 @@ function DataCollector() {
   const displayedPosts = getFilteredPostsForDisplay()
 
   const handleFetchData = async () => {
-    // Validate date range (Khoros API allows maximum 7 days)
-    if (filters.dateFrom && filters.dateTo) {
-      const fromDate = new Date(filters.dateFrom)
-      const toDate = new Date(filters.dateTo)
-      const daysDiff = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24))
-      
-      if (daysDiff > 7) {
-        setStatus('❌ Error: Khoros API allows maximum 7 days per request. Please select a shorter date range.')
-        return
-      }
-      
-      if (daysDiff < 0) {
-        setStatus('❌ Error: "From Date" must be before "To Date".')
-        return
-      }
+    if (!filters.dateFrom || !filters.dateTo) {
+      setStatus('❌ Error: Please select both "From Date" and "To Date".')
+      return
+    }
+    
+    const fromDate = new Date(filters.dateFrom)
+    const toDate = new Date(filters.dateTo)
+    const daysDiff = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24))
+    
+    if (daysDiff < 0) {
+      setStatus('❌ Error: "From Date" must be before "To Date".')
+      return
     }
     
     setLoading(true)
-    setStatus('🔌 Connecting to Khoros API...')
+    
+    // Split date range into 7-day chunks if needed
+    const MAX_DAYS_PER_REQUEST = 7
+    const dateRanges = []
+    
+    if (daysDiff <= MAX_DAYS_PER_REQUEST) {
+      // Single request
+      dateRanges.push({ dateFrom: filters.dateFrom, dateTo: filters.dateTo })
+    } else {
+      // Split into multiple 7-day chunks
+      let currentStart = new Date(fromDate)
+      
+      while (currentStart <= toDate) {
+        const currentEnd = new Date(currentStart)
+        currentEnd.setDate(currentEnd.getDate() + MAX_DAYS_PER_REQUEST - 1)
+        
+        // Don't go past the end date
+        if (currentEnd > toDate) {
+          currentEnd.setTime(toDate.getTime())
+        }
+        
+        dateRanges.push({
+          dateFrom: currentStart.toISOString().split('T')[0],
+          dateTo: currentEnd.toISOString().split('T')[0]
+        })
+        
+        // Move to next chunk (start from the day after currentEnd)
+        currentStart = new Date(currentEnd)
+        currentStart.setDate(currentStart.getDate() + 1)
+      }
+    }
+    
+    setStatus(`🔄 Collecting data from ${dateRanges.length} time period(s)... (API limit: 7 days per request)`)
     
     try {
+      const allPosts = []
+      let totalCollected = 0
+      
+      // Make requests sequentially to avoid overwhelming the API
+      for (let i = 0; i < dateRanges.length; i++) {
+        const range = dateRanges[i]
+        const progress = `🔄 Collecting period ${i + 1} of ${dateRanges.length}: ${range.dateFrom} to ${range.dateTo}...`
+        setStatus(progress)
+        
+        try {
       const result = await fetchCommunityPosts({
         limit: filters.limit,
         filters: {
-          sentiment: filters.sentiment || undefined,
           requestType: filters.requestType || undefined,
-          platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
-          language: filters.language || undefined,
-          dateFrom: filters.dateFrom || undefined,
-          dateTo: filters.dateTo || undefined
+              platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
+              language: filters.language || undefined,
+              dateFrom: range.dateFrom,
+              dateTo: range.dateTo
+            }
+          })
+          
+          allPosts.push(...result.posts)
+          totalCollected += result.posts.length
+          
+          console.log(`✅ Period ${i + 1}/${dateRanges.length}: Collected ${result.posts.length} posts`)
+        } catch (error) {
+          console.error(`❌ Error collecting period ${i + 1}:`, error)
+          // Continue with other periods even if one fails
+          setStatus(`⚠️ Warning: Failed to collect period ${i + 1}, continuing with remaining periods...`)
+          await new Promise(resolve => setTimeout(resolve, 1000)) // Brief pause before next request
         }
-      })
+      }
       
-      const savedPosts = savePosts(result.posts)
+      // Remove duplicates based on post ID
+      const uniquePosts = Array.from(new Map(allPosts.map(post => [post.id, post])).values())
+      
+      const savedPosts = savePosts(uniquePosts)
       setPosts(savedPosts)
       
-      setStatus(`✅ Successfully fetched ${result.posts.length} real posts from Khoros API!`)
+      setStatus(`✅ Successfully collected ${uniquePosts.length} unique posts from ${dateRanges.length} time period(s)! (Total fetched: ${totalCollected})`)
       
-      setTimeout(() => setStatus(''), 5000)
+      setTimeout(() => setStatus(''), 8000)
     } catch (error) {
       console.error('❌ Collection Error:', error)
       
@@ -210,7 +258,8 @@ function DataCollector() {
                 Endpoint: <code className="bg-green-100 dark:bg-green-800 px-1 rounded">eu.api.lithium.com/lsi-data/v1</code>
               </p>
               <p className="text-xs text-orange-700 dark:text-orange-300 mt-2">
-                ⚠️ <strong>Note:</strong> Khoros API allows maximum 7 days per request. For larger date ranges, make multiple requests.
+                ⚠️ <strong>Note:</strong> Khoros API allows maximum 7 days per request. 
+                <span className="block mt-1">✅ <strong>Auto-split enabled:</strong> Large date ranges (1-2 months) will be automatically split into multiple requests.</span>
               </p>
             </div>
           </div>
@@ -239,23 +288,7 @@ function DataCollector() {
       <div className="card mb-8">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Collection Settings</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Sentiment Filter
-            </label>
-            <select
-              value={filters.sentiment}
-              onChange={(e) => setFilters({ ...filters, sentiment: e.target.value })}
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-            >
-              <option value="">All Sentiments</option>
-              <option value="positive">Positive</option>
-              <option value="negative">Negative</option>
-              <option value="neutral">Neutral</option>
-            </select>
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Request Type Filter
@@ -353,6 +386,11 @@ function DataCollector() {
                 ? `${Math.ceil((new Date(filters.dateTo) - new Date(filters.dateFrom)) / (1000 * 60 * 60 * 24))} days`
                 : 'Not selected'
             }
+            {filters.dateFrom && filters.dateTo && Math.ceil((new Date(filters.dateTo) - new Date(filters.dateFrom)) / (1000 * 60 * 60 * 24)) > 7 && (
+              <span className="block mt-1">
+                💡 <strong>Auto-split enabled:</strong> Large date ranges will be automatically split into multiple 7-day requests.
+              </span>
+            )}
           </p>
         </div>
 
@@ -426,7 +464,6 @@ function DataCollector() {
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Content</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Category</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Type</th>
-                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Sentiment</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Engagement</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Link</th>
                 </tr>
@@ -490,17 +527,6 @@ function DataCollector() {
                       <td className="p-3">
                         <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                           {post.requestType.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          post.sentiment === 'positive' 
-                            ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                            : post.sentiment === 'negative'
-                            ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                        }`}>
-                          {post.sentiment}
                         </span>
                       </td>
                       <td className="p-3 text-gray-600 dark:text-gray-400">

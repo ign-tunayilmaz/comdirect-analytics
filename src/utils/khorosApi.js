@@ -478,14 +478,19 @@ const transformKhorosData = (khorosResponse, options = {}) => {
       // Extract board/category name from CSV data
       const categoryName = msg.boardTitle || msg.board?.title || msg['board.title'] || 'Uncategorized'
       
+      // Extract userId from CSV data (field 25 from proxy server)
+      const userId = msg.userId || msg['user.uid'] || null
+      
       return {
         id: postId,
         author: author,
+        userId: userId, // Add userId for user analytics
         topic: title,
         content: stripHtml(body),
         category: categoryName, // Add category from boardTitle
         contentLanguage: detectLanguage(body, title),
-        sentiment: analyzeSentimentFromText(body),
+        // Use topic title as fallback for sentiment analysis since CSV doesn't include message body
+        sentiment: analyzeSentimentFromText(body || '', title || ''),
         requestType: categorizePostType(body, title),
         isPlatformRelated: checkIfPlatformRelated(msg.boardId || msg.board?.id, title, body),
         likes: likes,
@@ -635,7 +640,13 @@ const hydratePostsWithContent = async (posts = []) => {
     return posts
   }
 
-  const detailsMap = await fetchMessageDetails(candidateIds)
+  let detailsMap = {}
+  try {
+    detailsMap = await fetchMessageDetails(candidateIds)
+  } catch (error) {
+    console.warn('⚠️ Could not fetch message details (non-critical):', error.message)
+    // Continue without message details - posts will still have basic info
+  }
 
   return posts.map(post => {
     const detail =

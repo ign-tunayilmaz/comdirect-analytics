@@ -12,8 +12,8 @@ Created `.env.local` file with your Khoros API credentials:
 
 ```env
 VITE_KHOROS_COMMUNITY_ID=comdirectbank.prod
-VITE_KHOROS_CLIENT_ID=9De3u/U+HGfQlpMxqsnBxukwCvWYr+j+aHI4rSu/wEo=
-VITE_KHOROS_ACCESS_TOKEN=6d100a667bbc8a27e9d6e8b773b9e02d2400d21e
+VITE_KHOROS_CLIENT_ID=your_client_id_here
+VITE_KHOROS_ACCESS_TOKEN=your_access_token_here
 VITE_KHOROS_API_URL=https://api.livefyre.com/api/v4
 VITE_KHOROS_BULK_API_URL=https://data.livefyre.com
 ```
@@ -54,7 +54,7 @@ This endpoint provides conversation and message data from your community.
 
 All requests include:
 ```javascript
-Authorization: Bearer 6d100a667bbc8a27e9d6e8b773b9e02d2400d21e
+Authorization: Bearer your_access_token_here
 ```
 
 ### Data Flow

@@ -87,20 +87,24 @@ export const analyzeTopics = (posts) => {
   
   posts.forEach(post => {
     const topic = post.topic || 'Other'
-    topics[topic] = (topics[topic] || 0) + 1
+    // Skip empty or very short topics
+    if (topic && topic.trim().length > 0 && topic !== 'Other') {
+      topics[topic] = (topics[topic] || 0) + 1
+    }
   })
   
   return Object.entries(topics)
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({
-      name,
-      value,
+      name: name.length > 60 ? name.substring(0, 60) + '...' : name, // Truncate very long names
+      value: Number(value), // Ensure value is a number
       percentage: 0 // Will be calculated later
     }))
     .map((item, _, arr) => ({
       ...item,
       percentage: ((item.value / posts.length) * 100).toFixed(1)
     }))
+    .filter(item => item.value > 0) // Only include topics with at least 1 mention
 }
 
 /**
@@ -219,6 +223,260 @@ export const generateInsights = (posts) => {
   return insights
 }
 
+/**
+ * Calculate Active Users by period (weekly, monthly, quarterly)
+ * Returns an array of period data with unique user counts
+ */
+export const calculateActiveUsersByPeriod = (posts, periodType = 'monthly') => {
+  if (!posts || posts.length === 0) return []
+  
+  // Group posts by period and track unique users
+  const periodData = {}
+  let validUserCount = 0
+  
+  const getPeriodKey = (date, type) => {
+    const year = date.getFullYear()
+    const month = date.getMonth() + 1
+    
+    if (type === 'weekly') {
+      // Get week number (ISO week: week starts on Monday)
+      const startOfYear = new Date(year, 0, 1)
+      const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000))
+      const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7)
+      // Format: YYYY-WW
+      return `${year}-W${String(weekNumber).padStart(2, '0')}`
+    } else if (type === 'quarterly') {
+      // Get quarter (1-4)
+      const quarter = Math.floor(month / 3) + (month % 3 === 0 ? 0 : 1)
+      // Format: YYYY-Q1, YYYY-Q2, etc.
+      return `${year}-Q${quarter}`
+    } else {
+      // Monthly (default)
+      // Format: YYYY-MM
+      return `${year}-${String(month).padStart(2, '0')}`
+    }
+  }
+  
+  const formatPeriodForDisplay = (periodKey, type) => {
+    if (type === 'weekly') {
+      // Format: "Week 45, 2025"
+      const [year, week] = periodKey.split('-W')
+      return `W${week} ${year}`
+    } else if (type === 'quarterly') {
+      // Format: "Q1 2025"
+      const [year, quarter] = periodKey.split('-Q')
+      return `Q${quarter} ${year}`
+    } else {
+      // Format: "Jan 2025"
+      return formatMonthForDisplay(periodKey)
+    }
+  }
+  
+  posts.forEach(post => {
+    if (!post || !post.date) return
+    
+    try {
+      const date = new Date(post.date)
+      if (isNaN(date.getTime())) return
+      
+      const periodKey = getPeriodKey(date, periodType)
+      
+      if (!periodData[periodKey]) {
+        periodData[periodKey] = {
+          period: periodKey,
+          users: new Set(),
+          totalActivities: 0
+        }
+      }
+      
+      // Use userId if available, otherwise fall back to username/author
+      const userIdentifier = post.userId || post.author || null
+      
+      // Skip anonymous/deleted users (userId: -1 or username: "ehemaliger Nutzer")
+      // Also skip empty/null identifiers
+      if (userIdentifier && 
+          userIdentifier !== '-1' && 
+          userIdentifier !== 'ehemaliger Nutzer' && 
+          userIdentifier !== 'unknown' &&
+          String(userIdentifier).trim() !== '') {
+        periodData[periodKey].users.add(String(userIdentifier).trim())
+        validUserCount++
+      }
+      
+      periodData[periodKey].totalActivities++
+    } catch (error) {
+      console.warn('Error processing post for Active Users:', error, post)
+    }
+  })
+  
+  // Convert to array format for charts
+  const result = Object.values(periodData)
+    .map(data => ({
+      period: data.period,
+      activeUsers: data.users.size,
+      totalActivities: data.totalActivities,
+      // Format period for display
+      displayPeriod: formatPeriodForDisplay(data.period, periodType)
+    }))
+    .sort((a, b) => a.period.localeCompare(b.period))
+  
+  const periodName = periodType === 'weekly' ? 'weeks' : periodType === 'quarterly' ? 'quarters' : 'months'
+  console.log(`📊 Active Users Calculation (${periodType}): ${result.length} ${periodName}, ${validUserCount} valid user activities`)
+  return result
+}
+
+/**
+ * Calculate Monthly Active Users (MAU) - kept for backward compatibility
+ * Returns an array of monthly data with unique user counts
+ */
+export const calculateMonthlyActiveUsers = (posts) => {
+  return calculateActiveUsersByPeriod(posts, 'monthly')
+}
+
+/**
+ * Calculate New vs Returning members
+ * Compares users in the most recent month in dataset vs all previous months in dataset
+ */
+export const calculateNewVsReturningMembers = (posts, comparisonMonths = 1) => {
+  if (!posts || posts.length === 0) {
+    return {
+      currentMonth: { new: 0, returning: 0, total: 0 },
+      previousMonth: { new: 0, returning: 0, total: 0 },
+      trend: { new: 0, returning: 0 },
+      chartData: [
+        { name: 'New Members', value: 0, color: '#00A0E3' },
+        { name: 'Returning Members', value: 0, color: '#FFD500' }
+      ],
+      hasMultipleMonths: false,
+      dataQuality: 'insufficient'
+    }
+  }
+  
+  // Group all posts by month to find what months we actually have data for
+  const monthlyData = {}
+  const allUsers = new Set()
+  
+  posts.forEach(post => {
+    if (!post || !post.date) return
+    
+    try {
+      const date = new Date(post.date)
+      if (isNaN(date.getTime())) return
+      
+      const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      
+      const userIdentifier = post.userId || post.author || null
+      
+      // Skip anonymous/deleted users and empty identifiers
+      if (!userIdentifier || 
+          userIdentifier === '-1' || 
+          userIdentifier === 'ehemaliger Nutzer' || 
+          userIdentifier === 'unknown' ||
+          String(userIdentifier).trim() === '') {
+        return
+      }
+      
+      const cleanIdentifier = String(userIdentifier).trim()
+      allUsers.add(cleanIdentifier)
+      
+      if (!monthlyData[monthYear]) {
+        monthlyData[monthYear] = new Set()
+      }
+      monthlyData[monthYear].add(cleanIdentifier)
+    } catch (error) {
+      console.warn('Error processing post for New vs Returning:', error, post)
+    }
+  })
+  
+  // Get all months sorted (most recent first)
+  const months = Object.keys(monthlyData).sort((a, b) => b.localeCompare(a))
+  
+  // If we only have data from one month, we can't determine returning users
+  if (months.length === 0) {
+    return {
+      currentMonth: { new: 0, returning: 0, total: 0 },
+      previousMonth: { new: 0, returning: 0, total: 0 },
+      trend: { new: 0, returning: 0 },
+      chartData: [
+        { name: 'New Members', value: 0, color: '#00A0E3' },
+        { name: 'Returning Members', value: 0, color: '#FFD500' }
+      ],
+      hasMultipleMonths: false,
+      dataQuality: 'insufficient'
+    }
+  }
+  
+  const mostRecentMonth = months[0]
+  const currentMonthUsers = monthlyData[mostRecentMonth]
+  
+  // Collect all users from previous months (all months before the most recent)
+  const allPreviousUsers = new Set()
+  for (let i = 1; i < months.length; i++) {
+    monthlyData[months[i]].forEach(user => allPreviousUsers.add(user))
+  }
+  
+  // Calculate new vs returning for the most recent month
+  const newUsers = new Set()
+  const returningUsers = new Set()
+  
+  currentMonthUsers.forEach(user => {
+    if (allPreviousUsers.has(user)) {
+      returningUsers.add(user)
+    } else {
+      newUsers.add(user)
+    }
+  })
+  
+  // Get previous month stats (second most recent month if available)
+  const previousMonth = months.length > 1 ? months[1] : null
+  const previousMonthUsers = previousMonth ? monthlyData[previousMonth] : new Set()
+  
+  const result = {
+    currentMonth: {
+      new: newUsers.size,
+      returning: returningUsers.size,
+      total: currentMonthUsers.size,
+      month: mostRecentMonth
+    },
+    previousMonth: {
+      new: 0, // Would need even earlier data to calculate
+      returning: 0,
+      total: previousMonthUsers.size,
+      month: previousMonth
+    },
+    trend: {
+      new: newUsers.size,
+      returning: returningUsers.size
+    },
+    chartData: [
+      { name: 'New Members', value: newUsers.size, color: '#00A0E3' },
+      { name: 'Returning Members', value: returningUsers.size, color: '#FFD500' }
+    ],
+    hasMultipleMonths: months.length > 1,
+    dataQuality: months.length > 1 ? 'good' : 'limited',
+    availableMonths: months.length,
+    monthsInData: months
+  }
+  
+  console.log(`📊 New vs Returning Analysis:`)
+  console.log(`   Available months in data: ${months.length} (${months.join(', ')})`)
+  console.log(`   Most recent month: ${mostRecentMonth} (${currentMonthUsers.size} users)`)
+  console.log(`   Previous months users: ${allPreviousUsers.size} unique users`)
+  console.log(`   Result: ${result.currentMonth.total} total (${result.currentMonth.new} new, ${result.currentMonth.returning} returning)`)
+  console.log(`   Data quality: ${result.dataQuality} (${result.hasMultipleMonths ? 'can determine returning users' : 'only one month - all appear as new'})`)
+  
+  return result
+}
+
+/**
+ * Format month string for display
+ */
+const formatMonthForDisplay = (monthYear) => {
+  const [year, month] = monthYear.split('-')
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${monthNames[parseInt(month) - 1]} ${year}`
+}
+
 export default {
   extractKeywords,
   calculateWordFrequency,
@@ -228,6 +486,9 @@ export default {
   analyzeEngagement,
   analyzeTrends,
   findCommonIssues,
-  generateInsights
+  generateInsights,
+  calculateMonthlyActiveUsers,
+  calculateActiveUsersByPeriod,
+  calculateNewVsReturningMembers
 }
 

@@ -48,7 +48,7 @@ app.use(express.json());
 
 const KHOROS_CONFIG = {
   communityId: 'comdirectbank.prod',
-  accessToken: '6d100a667bbc8a27e9d6e8b773b9e02d2400d21e',
+  accessToken: process.env.KHOROS_ACCESS_TOKEN || 'your_access_token_here',
   apiUrl: 'https://community.comdirect.de/api/2.0/search'
 };
 

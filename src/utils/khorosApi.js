@@ -15,7 +15,10 @@ const KHOROS_API_CONFIG = {
   proxyUrl: import.meta.env.VITE_KHOROS_PROXY_URL || '', // Use proxy to bypass CORS
 }
 
-const ALLOWED_EVENT_TYPES = ['messages.publish']
+// Include all event types to capture all unique visitors (not just posters)
+// Key event types: messages.publish (posts), view (page views), visits.visit-summary (visits)
+// Empty array means include ALL event types
+const ALLOWED_EVENT_TYPES = [] // Include all event types for accurate visitor counts
 
 const parseTimestampValue = (value) => {
   if (value === undefined || value === null) return null
@@ -386,28 +389,34 @@ const transformKhorosData = (khorosResponse, options = {}) => {
         return false
       }
       
-      // Filter out posts without a proper topic title
-      const topicTitle = msg.topicTitle || msg.subject || msg.title || ''
+      // For visitor analytics, we need ALL events (including views without topicId)
+      // View events don't require topicTitle or topicId - they're still valid visitors
+      const isViewEvent = eventType === 'view' || eventType === 'visits.visit-summary' || eventType === 'rss.feed-request'
       
-      // Filter out empty titles
-      if (!topicTitle || topicTitle.trim() === '') {
-        return false
-      }
-      
-      // Filter out "No subject" posts
-      if (topicTitle === 'No subject') {
-        return false
-      }
-      
-      // Filter out CSV header values (in case header wasn't skipped properly)
-      const headerValues = ['conversation.title', 'user.login', 'conversation.uid', 'board.title', 'board.uid']
-      if (headerValues.includes(topicTitle)) {
-        return false
-      }
-      
-      // Filter out records without valid topicId (these are just activity logs, not actual posts)
-      if (!msg.topicId || String(msg.topicId).trim() === '') {
-        return false
+      // For non-view events (posts), we require topic title
+      if (!isViewEvent) {
+        const topicTitle = msg.topicTitle || msg.subject || msg.title || ''
+        
+        // Filter out empty titles (only for non-view events)
+        if (!topicTitle || topicTitle.trim() === '') {
+          return false
+        }
+        
+        // Filter out "No subject" posts
+        if (topicTitle === 'No subject') {
+          return false
+        }
+        
+        // Filter out CSV header values (in case header wasn't skipped properly)
+        const headerValues = ['conversation.title', 'user.login', 'conversation.uid', 'board.title', 'board.uid']
+        if (headerValues.includes(topicTitle)) {
+          return false
+        }
+        
+        // For post events, we require topicId
+        if (!msg.topicId || String(msg.topicId).trim() === '') {
+          return false
+        }
       }
 
       const msgDate = getMessageDate(msg)
@@ -430,16 +439,20 @@ const transformKhorosData = (khorosResponse, options = {}) => {
 
       return dateB.getTime() - dateA.getTime()
     })
-    .slice(0, limit) // Apply limit
+    // No limit - fetch all data for accurate MAU calculation
     .map(msg => {
       // LSI Data Export API returns CSV data that our proxy parses
       // The proxy extracts: topicTitle, boardTitle, username, timestamp, etc.
       
       // Extract title from CSV-parsed fields
+      // For view events, use event type as title if no topic title available
+      const eventType = String(msg.eventType || '').toLowerCase()
+      const isViewEvent = eventType === 'view' || eventType === 'visits.visit-summary' || eventType === 'rss.feed-request'
+      
       const title = msg.topicTitle || 
                     msg.subject || 
                     msg.title || 
-                    'No subject'
+                    (isViewEvent ? `View Event (${eventType})` : 'No subject')
       
       // Extract body/content - CSV doesn't include message body
       // This is activity/analytics data, not message content
@@ -459,10 +472,11 @@ const transformKhorosData = (khorosResponse, options = {}) => {
       const createdAt = parsedTimestamp ? parsedTimestamp.toISOString() : new Date().toISOString()
       
       // Extract ID from CSV topicId
+      // For view events without topicId, use timestamp + event type as ID
       const postId = msg.messageId ||
                      msg.topicId || 
                      msg.id || 
-                     `msg_${Math.random().toString(36).substr(2, 9)}`
+                     (isViewEvent && msg.timestamp ? `view_${msg.timestamp}_${eventType}` : `msg_${Math.random().toString(36).substr(2, 9)}`)
       
       // Extract engagement metrics (not available in CSV activity data)
       const likes = msg.likes || 0

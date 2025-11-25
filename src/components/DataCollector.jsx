@@ -6,7 +6,18 @@ import { Download, RefreshCw, Trash2, CheckCircle, AlertCircle, ExternalLink } f
 function DataCollector() {
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
-  const [posts, setPosts] = useState(loadPosts())
+  const [progress, setProgress] = useState(0) // Progress percentage (0-100)
+  const [progressText, setProgressText] = useState('')
+  const [posts, setPosts] = useState([])
+  
+  // Load posts on mount
+  useEffect(() => {
+    const loadInitialPosts = async () => {
+      const loaded = await loadPosts()
+      setPosts(loaded)
+    }
+    loadInitialPosts()
+  }, [])
   const [expandedRows, setExpandedRows] = useState(new Set())
   const [apiConfigured, setApiConfigured] = useState(false)
   // Calculate default date range (last 7 days - Khoros API limit)
@@ -26,8 +37,7 @@ function DataCollector() {
     platformRelated: '',
     language: '',
     dateFrom: defaultDates.dateFrom,
-    dateTo: defaultDates.dateTo,
-    limit: 50
+    dateTo: defaultDates.dateTo
   })
 
   // Check API configuration on mount
@@ -135,6 +145,8 @@ function DataCollector() {
     }
     
     setStatus(`🔄 Collecting data from ${dateRanges.length} time period(s)... (API limit: 7 days per request)`)
+    setProgress(0)
+    setProgressText(`Starting data collection...`)
     
     try {
       const allPosts = []
@@ -143,12 +155,16 @@ function DataCollector() {
       // Make requests sequentially to avoid overwhelming the API
       for (let i = 0; i < dateRanges.length; i++) {
         const range = dateRanges[i]
-        const progress = `🔄 Collecting period ${i + 1} of ${dateRanges.length}: ${range.dateFrom} to ${range.dateTo}...`
-        setStatus(progress)
+        const currentProgress = Math.round(((i + 1) / dateRanges.length) * 100)
+        const progressMsg = `Collecting period ${i + 1} of ${dateRanges.length}: ${range.dateFrom} to ${range.dateTo}...`
+        
+        setProgress(currentProgress)
+        setProgressText(progressMsg)
+        setStatus(`🔄 ${progressMsg}`)
         
         try {
       const result = await fetchCommunityPosts({
-        limit: filters.limit,
+        limit: 999999, // Fetch all data - no limit for MAU calculation
         filters: {
           requestType: filters.requestType || undefined,
               platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
@@ -158,8 +174,16 @@ function DataCollector() {
             }
           })
           
-          allPosts.push(...result.posts)
+          // Use loop instead of spread/apply to avoid stack overflow with large arrays
+          // Spread operator (...array) and apply() can cause "Maximum call stack size exceeded" with 100k+ items
+          for (let j = 0; j < result.posts.length; j++) {
+            allPosts.push(result.posts[j])
+          }
           totalCollected += result.posts.length
+          
+          const currentProgress = Math.round(((i + 1) / dateRanges.length) * 100)
+          setProgress(currentProgress)
+          setProgressText(`Period ${i + 1}/${dateRanges.length} complete: ${result.posts.length} posts collected`)
           
           console.log(`✅ Period ${i + 1}/${dateRanges.length}: Collected ${result.posts.length} posts`)
         } catch (error) {
@@ -170,15 +194,36 @@ function DataCollector() {
         }
       }
       
-      // Remove duplicates based on post ID
-      const uniquePosts = Array.from(new Map(allPosts.map(post => [post.id, post])).values())
+      // Remove duplicates based on post ID - process in batches to avoid stack overflow
+      const uniqueMap = new Map()
+      const BATCH_SIZE = 10000
+      for (let i = 0; i < allPosts.length; i += BATCH_SIZE) {
+        const batch = allPosts.slice(i, i + BATCH_SIZE)
+        batch.forEach(post => {
+          if (post && post.id) {
+            uniqueMap.set(post.id, post)
+          }
+        })
+      }
+      const uniquePosts = Array.from(uniqueMap.values())
       
-      const savedPosts = savePosts(uniquePosts)
-      setPosts(savedPosts)
+      try {
+        const savedPosts = await savePosts(uniquePosts)
+        setPosts(savedPosts)
+      } catch (error) {
+        console.error('Error saving posts:', error)
+        setStatus(`❌ Error saving data: ${error.message || 'Storage quota exceeded. The system will try to use IndexedDB automatically.'}`)
+      }
       
+      setProgress(100)
+      setProgressText(`Complete! Collected ${uniquePosts.length} unique posts`)
       setStatus(`✅ Successfully collected ${uniquePosts.length} unique posts from ${dateRanges.length} time period(s)! (Total fetched: ${totalCollected})`)
       
-      setTimeout(() => setStatus(''), 8000)
+      setTimeout(() => {
+        setStatus('')
+        setProgress(0)
+        setProgressText('')
+      }, 8000)
     } catch (error) {
       console.error('❌ Collection Error:', error)
       
@@ -194,14 +239,16 @@ function DataCollector() {
       }
       
       setStatus(errorMessage)
+      setProgress(0)
+      setProgressText('')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
     if (window.confirm('Are you sure you want to clear all collected data?')) {
-      clearPosts()
+      await clearPosts()
       setPosts([])
       setStatus('All data cleared.')
       setTimeout(() => setStatus(''), 3000)
@@ -228,8 +275,39 @@ function DataCollector() {
         <p className="text-gray-600 dark:text-gray-400">Collect and manage community posts for analysis</p>
       </div>
 
+      {/* Progress Bar */}
+      {loading && (
+        <div className="mb-6 card bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                {progressText || 'Collecting data...'}
+              </span>
+              <span className="text-sm font-bold text-blue-700 dark:text-blue-300">
+                {progress}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300 ease-out flex items-center justify-end pr-1"
+                style={{ width: `${progress}%` }}
+              >
+                {progress > 10 && (
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                )}
+              </div>
+            </div>
+          </div>
+          {status && !status.includes('Error') && (
+            <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+              {status}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Status Message */}
-      {status && (
+      {status && !loading && (
         <div className={`mb-6 p-4 rounded-lg flex items-center space-x-3 ${
           status.includes('Error') 
             ? 'bg-red-50 border border-red-200 text-red-700 dark:bg-red-900/20' 
@@ -364,19 +442,6 @@ function DataCollector() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Posts to Collect
-            </label>
-            <input
-              type="number"
-              value={filters.limit}
-              onChange={(e) => setFilters({ ...filters, limit: parseInt(e.target.value) })}
-              min="10"
-              max="500"
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-            />
-          </div>
         </div>
 
         <div className="mb-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">

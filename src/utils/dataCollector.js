@@ -1,6 +1,13 @@
 // Data collection and scraping utilities
 import axios from 'axios'
 import { fetchPostsFromKhorosAPI, isApiConfigured } from './khorosApi'
+import { 
+  savePostsToIndexedDB, 
+  loadPostsFromIndexedDB, 
+  clearIndexedDB,
+  isIndexedDBAvailable,
+  getIndexedDBStorageInfo
+} from './indexedDbStorage'
 // Note: Browser-based scraping is disabled due to CORS restrictions
 // import { scrapeComdirectPosts } from './communityScraper'
 
@@ -169,7 +176,7 @@ const generateTags = (topic, requestType) => {
  * Fetch community posts (ONLY from Khoros API - NO DEMO DATA)
  */
 export const fetchCommunityPosts = async (options = {}) => {
-  const { page = 1, limit = 50, filters = {} } = options
+  const { page = 1, limit = 999999, filters = {} } = options // Default to very high limit to fetch all data for MAU
   
   // Check if Khoros API is configured
   if (!isApiConfigured()) {
@@ -211,17 +218,148 @@ export const fetchCommunityPosts = async (options = {}) => {
 /**
  * Store posts to local storage for persistence
  */
-export const savePosts = (posts) => {
+/**
+ * Store only essential fields for analytics to reduce storage size
+ * For MAU calculation, we only need: id, userId, author, date, eventType, location
+ * But we also need to keep fields that Dashboard/analytics functions expect
+ */
+const getMinimalPostData = (post) => {
+  return {
+    id: post.id,
+    userId: post.userId,
+    author: post.author,
+    date: post.date,
+    eventType: post.eventType,
+    location: post.location,
+    // Keep topic for basic filtering, but truncate if too long
+    topic: post.topic ? post.topic.substring(0, 100) : '',
+    // Keep these fields with defaults for analytics functions that expect them
+    content: post.content || '',
+    requestType: post.requestType || 'unknown',
+    sentiment: post.sentiment || 'neutral',
+    category: post.category || 'Uncategorized',
+    // Keep URL if it exists (for migration)
+    url: post.url || undefined
+  }
+}
+
+/**
+ * Save posts - tries localStorage first, falls back to IndexedDB if quota exceeded
+ */
+export const savePosts = async (posts) => {
+  // First, minimize the data
+  const BATCH_SIZE = 10000
+  const uniqueMap = new Map()
+  
+  // Get existing posts from localStorage first
+  let existing = []
   try {
-    const existing = JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
-    const merged = [...existing, ...posts]
-    // Remove duplicates based on ID
-    const unique = Array.from(new Map(merged.map(post => [post.id, post])).values())
-    localStorage.setItem('comdirect_posts', JSON.stringify(unique))
+    existing = JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
+  } catch (e) {
+    console.warn('Could not load existing posts from localStorage:', e)
+  }
+  
+  // Merge existing with new posts
+  const merged = existing.concat(posts)
+  
+  // Process in batches to minimize data
+  for (let i = 0; i < merged.length; i += BATCH_SIZE) {
+    const batch = merged.slice(i, i + BATCH_SIZE)
+    batch.forEach(post => {
+      if (post && post.id) {
+        const isAlreadyMinimal = !post.content || post.content === '' || 
+                                 (post.content && post.content.length < 50 && !post.body)
+        
+        if (isAlreadyMinimal) {
+          uniqueMap.set(post.id, {
+            ...post,
+            content: post.content || '',
+            requestType: post.requestType || 'unknown',
+            sentiment: post.sentiment || 'neutral',
+            category: post.category || 'Uncategorized'
+          })
+        } else {
+          uniqueMap.set(post.id, getMinimalPostData(post))
+        }
+      }
+    })
+  }
+  
+  const unique = Array.from(uniqueMap.values())
+  const jsonString = JSON.stringify(unique)
+  const sizeInMB = new Blob([jsonString]).size / (1024 * 1024)
+  
+  // Try localStorage first
+  try {
+    if (sizeInMB > 5) {
+      console.warn(`⚠️ Large dataset (${sizeInMB.toFixed(2)}MB). Will use IndexedDB for storage.`)
+    }
+    
+    localStorage.setItem('comdirect_posts', jsonString)
+    console.log(`✅ Saved ${unique.length} posts to localStorage (${sizeInMB.toFixed(2)}MB)`)
+    
+    // Also save to IndexedDB as backup for large datasets
+    if (isIndexedDBAvailable() && sizeInMB > 3) {
+      try {
+        await savePostsToIndexedDB(unique)
+        // Mark that we're using IndexedDB
+        localStorage.setItem('comdirect_use_indexeddb', 'true')
+      } catch (idbError) {
+        console.warn('⚠️ Could not save to IndexedDB (will use localStorage only):', idbError)
+      }
+    }
+    
     return unique
   } catch (error) {
-    console.error('Error saving posts:', error)
-    return posts
+    if (error.name === 'QuotaExceededError') {
+      console.warn('⚠️ localStorage quota exceeded. Switching to IndexedDB...')
+      
+      // Fallback to IndexedDB
+      if (isIndexedDBAvailable()) {
+        try {
+          await savePostsToIndexedDB(unique)
+          localStorage.setItem('comdirect_use_indexeddb', 'true')
+          localStorage.removeItem('comdirect_posts') // Clear localStorage to free space
+          
+          const storageInfo = await getIndexedDBStorageInfo()
+          if (storageInfo) {
+            console.log(`✅ Saved ${unique.length} posts to IndexedDB (${storageInfo.usageMB}MB used, ${storageInfo.availableMB}MB available)`)
+          } else {
+            console.log(`✅ Saved ${unique.length} posts to IndexedDB`)
+          }
+          
+          return unique
+        } catch (idbError) {
+          console.error('❌ Failed to save to IndexedDB:', idbError)
+          // Last resort: save only recent posts
+          try {
+            const recentPosts = unique.slice(-50000)
+            const minimal = recentPosts.map(getMinimalPostData)
+            const jsonString = JSON.stringify(minimal)
+            localStorage.setItem('comdirect_posts', jsonString)
+            console.log(`⚠️ Saved only most recent 50,000 posts due to storage limits`)
+            return minimal
+          } catch (finalError) {
+            console.error('❌ Failed to save even minimal data:', finalError)
+            throw new Error('Storage quota exceeded. Please reduce date range or clear existing data.')
+          }
+        }
+      } else {
+        // IndexedDB not available - try to save only recent posts
+        try {
+          const recentPosts = unique.slice(-50000)
+          const minimal = recentPosts.map(getMinimalPostData)
+          const jsonString = JSON.stringify(minimal)
+          localStorage.setItem('comdirect_posts', jsonString)
+          console.log(`⚠️ IndexedDB not available. Saved only most recent 50,000 posts.`)
+          return minimal
+        } catch (finalError) {
+          console.error('❌ Failed to save even minimal data:', finalError)
+          throw new Error('Storage quota exceeded and IndexedDB not available. Please reduce date range.')
+        }
+      }
+    }
+    throw error
   }
 }
 
@@ -229,6 +367,10 @@ export const savePosts = (posts) => {
  * Migrate old posts to include isPlatformRelated, url, and contentLanguage fields
  */
 const migratePosts = (posts) => {
+  if (!posts || !Array.isArray(posts) || posts.length === 0) {
+    return []
+  }
+  
   const platformTopics = [
     'Community forum features', 'Post notifications', 'User profile settings',
     'Community moderation', 'Forum search functionality', 'Message threading',
@@ -236,55 +378,132 @@ const migratePosts = (posts) => {
     'Private messaging', 'Topic subscriptions', 'Community guidelines'
   ]
   
-  return posts.map((post, index) => {
-    const updates = {}
-    
-    // If the post doesn't have isPlatformRelated field, add it based on topic
-    if (post.isPlatformRelated === undefined) {
-      updates.isPlatformRelated = platformTopics.includes(post.topic)
-    }
-    
-    // If the post doesn't have a URL field, generate one
-    if (!post.url) {
-      const postId = post.id.replace('post_', '')
-      updates.url = `https://community.comdirect.de/t5/community/m-p/${postId}`
-    }
-    
-    // If the post doesn't have a language field, default to 'en'
-    if (!post.contentLanguage) {
-      updates.contentLanguage = 'en'
-    }
-    
-    // Return post with updates if any, otherwise return original
-    return Object.keys(updates).length > 0 ? { ...post, ...updates } : post
-  })
+  return posts
+    .filter(post => post && post.id && post.date) // Filter out invalid posts
+    .map((post, index) => {
+      const updates = {}
+      
+      // If the post doesn't have isPlatformRelated field, add it based on topic
+      if (post.isPlatformRelated === undefined) {
+        updates.isPlatformRelated = post.topic ? platformTopics.includes(post.topic) : false
+      }
+      
+      // If the post doesn't have a URL field, generate one
+      if (!post.url && post.id) {
+        const postId = String(post.id).replace('post_', '')
+        updates.url = `https://community.comdirect.de/t5/community/m-p/${postId}`
+      }
+      
+      // If the post doesn't have a language field, default to 'en'
+      if (!post.contentLanguage) {
+        updates.contentLanguage = 'en'
+      }
+      
+      // Ensure required fields exist for analytics
+      if (!post.content) updates.content = ''
+      if (!post.requestType) updates.requestType = 'unknown'
+      if (!post.sentiment) updates.sentiment = 'neutral'
+      if (!post.category) updates.category = 'Uncategorized'
+      if (!post.topic) updates.topic = ''
+      
+      // Return post with updates if any, otherwise return original
+      return Object.keys(updates).length > 0 ? { ...post, ...updates } : post
+    })
 }
 
 /**
- * Load posts from local storage
+ * Load posts from storage (localStorage or IndexedDB)
  */
-export const loadPosts = () => {
+export const loadPosts = async () => {
   try {
-    const posts = JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
-    const migratedPosts = migratePosts(posts)
+    // Check if we're using IndexedDB
+    const useIndexedDB = localStorage.getItem('comdirect_use_indexeddb') === 'true'
     
-    // Save migrated posts back to localStorage
-    if (migratedPosts.length > 0 && migratedPosts.some(p => p.isPlatformRelated === undefined)) {
-      localStorage.setItem('comdirect_posts', JSON.stringify(migratedPosts))
+    if (useIndexedDB && isIndexedDBAvailable()) {
+      console.log('📂 Loading posts from IndexedDB...')
+      const posts = await loadPostsFromIndexedDB()
+      
+      if (posts && posts.length > 0) {
+        const migratedPosts = migratePosts(posts)
+        console.log(`✅ Loaded ${migratedPosts.length} posts from IndexedDB`)
+        return migratedPosts
+      }
     }
     
+    // Fallback to localStorage
+    const posts = JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
+    
+    if (!posts || !Array.isArray(posts) || posts.length === 0) {
+      // Try IndexedDB as fallback
+      if (isIndexedDBAvailable()) {
+        console.log('📂 No posts in localStorage, trying IndexedDB...')
+        const idbPosts = await loadPostsFromIndexedDB()
+        if (idbPosts && idbPosts.length > 0) {
+          const migratedPosts = migratePosts(idbPosts)
+          console.log(`✅ Loaded ${migratedPosts.length} posts from IndexedDB`)
+          return migratedPosts
+        }
+      }
+      console.log('📭 No posts found in storage')
+      return []
+    }
+    
+    console.log(`📂 Loading ${posts.length} posts from localStorage`)
+    const migratedPosts = migratePosts(posts)
+    
+    // Only save back if we actually made changes (added missing fields)
+    const needsMigration = migratedPosts.some(p => 
+      p.isPlatformRelated === undefined || 
+      !p.content || 
+      !p.requestType || 
+      !p.sentiment || 
+      !p.category
+    )
+    
+    if (needsMigration && migratedPosts.length > 0) {
+      console.log('🔄 Migrating posts with missing fields...')
+      try {
+        // Try to save back - if it fails, switch to IndexedDB
+        localStorage.setItem('comdirect_posts', JSON.stringify(migratedPosts))
+        console.log(`✅ Migrated ${migratedPosts.length} posts`)
+      } catch (error) {
+        if (error.name === 'QuotaExceededError' && isIndexedDBAvailable()) {
+          console.warn('⚠️ localStorage full, saving to IndexedDB instead...')
+          try {
+            await savePostsToIndexedDB(migratedPosts)
+            localStorage.setItem('comdirect_use_indexeddb', 'true')
+            localStorage.removeItem('comdirect_posts')
+          } catch (idbError) {
+            console.error('⚠️ Failed to save migrated posts to IndexedDB:', idbError)
+          }
+        } else {
+          console.error('⚠️ Failed to save migrated posts:', error)
+        }
+      }
+    }
+    
+    console.log(`✅ Loaded ${migratedPosts.length} posts`)
     return migratedPosts
   } catch (error) {
-    console.error('Error loading posts:', error)
+    console.error('❌ Error loading posts:', error)
     return []
   }
 }
 
 /**
- * Clear all stored posts
+ * Clear all stored posts (from both localStorage and IndexedDB)
  */
-export const clearPosts = () => {
+export const clearPosts = async () => {
   localStorage.removeItem('comdirect_posts')
+  localStorage.removeItem('comdirect_use_indexeddb')
+  
+  if (isIndexedDBAvailable()) {
+    try {
+      await clearIndexedDB()
+    } catch (error) {
+      console.error('Error clearing IndexedDB:', error)
+    }
+  }
 }
 
 export default {

@@ -15,8 +15,12 @@
  * SECURITY: Never commit credentials to git! Use environment variables.
  */
 
-// Load environment variables from .env file
-require('dotenv').config();
+// Load environment variables from .env or .env.local file
+require('dotenv').config({ path: '.env.local' });
+// Also try .env if .env.local doesn't exist
+if (!process.env.KHOROS_CLIENT_ID && !process.env.VITE_KHOROS_CLIENT_ID) {
+  require('dotenv').config({ path: '.env' });
+}
 
 const express = require('express');
 const cors = require('cors');
@@ -30,14 +34,11 @@ app.use(express.json());
 
 // Khoros API Configuration
 // IMPORTANT: Use environment variables for credentials!
-// Set these in your environment or .env file:
-//   KHOROS_COMMUNITY_ID=comdirectbank.prod
-//   KHOROS_CLIENT_ID=your_client_id_here
-//   KHOROS_ACCESS_TOKEN=your_access_token_here
+// Supports both VITE_ prefixed (from .env.local) and non-prefixed (from .env) variables
 const KHOROS_CONFIG = {
-  communityId: process.env.KHOROS_COMMUNITY_ID || 'comdirectbank.prod',
-  clientId: process.env.KHOROS_CLIENT_ID || '',
-  accessToken: process.env.KHOROS_ACCESS_TOKEN || '',
+  communityId: process.env.KHOROS_COMMUNITY_ID || process.env.VITE_KHOROS_COMMUNITY_ID || 'comdirectbank.prod',
+  clientId: process.env.KHOROS_CLIENT_ID || process.env.VITE_KHOROS_CLIENT_ID || '',
+  accessToken: process.env.KHOROS_ACCESS_TOKEN || process.env.VITE_KHOROS_ACCESS_TOKEN || '',
   baseUrl: 'https://eu.api.lithium.com/lsi-data/v1/data/export/community'
 };
 

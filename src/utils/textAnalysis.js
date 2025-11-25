@@ -289,17 +289,29 @@ export const calculateActiveUsersByPeriod = (posts, periodType = 'monthly') => {
         }
       }
       
+      // For active users calculation, we want to count ALL unique visitors
       // Use userId if available, otherwise fall back to username/author
+      // For view events without user info, use location-based identifier
       const userIdentifier = post.userId || post.author || null
+      const eventType = post.eventType || ''
       
-      // Skip anonymous/deleted users (userId: -1 or username: "ehemaliger Nutzer")
-      // Also skip empty/null identifiers
+      let identifier = null
+      
       if (userIdentifier && 
           userIdentifier !== '-1' && 
           userIdentifier !== 'ehemaliger Nutzer' && 
           userIdentifier !== 'unknown' &&
           String(userIdentifier).trim() !== '') {
-        periodData[periodKey].users.add(String(userIdentifier).trim())
+        // Use userId/author if available
+        identifier = String(userIdentifier).trim()
+      } else if (post.location) {
+        // For anonymous users, use location + event type as identifier
+        // This helps count unique anonymous visitors by location
+        identifier = `anonymous_${post.location}_${eventType}`
+      }
+      
+      if (identifier) {
+        periodData[periodKey].users.add(identifier)
         validUserCount++
       }
       
@@ -469,6 +481,113 @@ export const calculateNewVsReturningMembers = (posts, comparisonMonths = 1) => {
 }
 
 /**
+ * Calculate Unique Visitors
+ * Tracks unique users and optionally by location
+ */
+export const calculateUniqueVisitors = (posts) => {
+  if (!posts || posts.length === 0) {
+    return {
+      total: 0,
+      byLocation: {},
+      byCountry: {},
+      topLocations: [],
+      topCountries: []
+    }
+  }
+  
+  const uniqueUsers = new Set()
+  const locationMap = new Map() // location -> Set of users
+  const countryMap = new Map() // country -> Set of users
+  const userLocations = new Map() // user -> location
+  
+  posts.forEach(post => {
+    if (!post || !post.date) return
+    
+    // For unique visitors, we want to count ALL users, including anonymous ones
+    // But we'll track them differently - use a combination of identifiers
+    const userIdentifier = post.userId || post.author || null
+    const eventType = post.eventType || ''
+    
+    // For view events, we might not have userId/author, so use location + IP-like identifier
+    // For other events, use userId/author
+    let identifier = null
+    
+    if (userIdentifier && 
+        userIdentifier !== '-1' && 
+        userIdentifier !== 'ehemaliger Nutzer' && 
+        userIdentifier !== 'unknown' &&
+        String(userIdentifier).trim() !== '') {
+      // Use userId/author if available
+      identifier = String(userIdentifier).trim()
+    } else if (post.location) {
+      // For anonymous users, use location + event type as identifier
+      // This helps count unique anonymous visitors by location
+      identifier = `anonymous_${post.location}_${eventType}`
+    } else {
+      // Skip if we have no way to identify this visitor
+      return
+    }
+    
+    uniqueUsers.add(identifier)
+    
+    // Track by location if available
+    if (post.location) {
+      const location = post.location
+      
+      if (!locationMap.has(location)) {
+        locationMap.set(location, new Set())
+      }
+      locationMap.get(location).add(identifier)
+      
+      // Extract country from location (format: "City, Country")
+      const country = location.split(',').pop()?.trim() || 'Unknown'
+      if (!countryMap.has(country)) {
+        countryMap.set(country, new Set())
+      }
+      countryMap.get(country).add(identifier)
+      
+      // Store user's primary location (first seen)
+      if (!userLocations.has(identifier)) {
+        userLocations.set(identifier, location)
+      }
+    }
+  })
+  
+  // Convert to arrays for display
+  const topLocations = Array.from(locationMap.entries())
+    .map(([location, users]) => ({
+      location,
+      visitors: users.size,
+      percentage: ((users.size / uniqueUsers.size) * 100).toFixed(1)
+    }))
+    .sort((a, b) => b.visitors - a.visitors)
+    .slice(0, 10)
+  
+  const topCountries = Array.from(countryMap.entries())
+    .map(([country, users]) => ({
+      country,
+      visitors: users.size,
+      percentage: ((users.size / uniqueUsers.size) * 100).toFixed(1)
+    }))
+    .sort((a, b) => b.visitors - a.visitors)
+    .slice(0, 10)
+  
+  return {
+    total: uniqueUsers.size,
+    byLocation: Object.fromEntries(
+      Array.from(locationMap.entries()).map(([loc, users]) => [loc, users.size])
+    ),
+    byCountry: Object.fromEntries(
+      Array.from(countryMap.entries()).map(([country, users]) => [country, users.size])
+    ),
+    topLocations,
+    topCountries,
+    locationsWithData: locationMap.size,
+    countriesWithData: countryMap.size
+  }
+}
+
+/**
  * Format month string for display
  */
 const formatMonthForDisplay = (monthYear) => {
@@ -489,6 +608,7 @@ export default {
   generateInsights,
   calculateMonthlyActiveUsers,
   calculateActiveUsersByPeriod,
-  calculateNewVsReturningMembers
+  calculateNewVsReturningMembers,
+  calculateUniqueVisitors
 }
 

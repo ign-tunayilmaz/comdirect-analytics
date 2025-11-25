@@ -6,7 +6,8 @@ import {
   analyzeEngagement,
   generateInsights,
   calculateActiveUsersByPeriod,
-  calculateNewVsReturningMembers
+  calculateNewVsReturningMembers,
+  calculateUniqueVisitors
 } from '../utils/textAnalysis'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { TrendingUp, MessageSquare, ThumbsUp, AlertCircle, CheckCircle, Info, Users, UserPlus, Eye, Database } from 'lucide-react'
@@ -24,9 +25,13 @@ function Dashboard() {
   const [showVerification, setShowVerification] = useState(false)
   const [userBreakdown, setUserBreakdown] = useState(null)
   const [periodType, setPeriodType] = useState('monthly') // 'weekly', 'monthly', 'quarterly'
+  const [uniqueVisitors, setUniqueVisitors] = useState(null)
 
   useEffect(() => {
-    loadData()
+    const loadDataAsync = async () => {
+      await loadData()
+    }
+    loadDataAsync()
   }, [])
 
   const updateActiveUsersData = (postsToAnalyze, period) => {
@@ -116,8 +121,8 @@ function Dashboard() {
     })
   }
 
-  const loadData = () => {
-    const loadedPosts = loadPosts()
+  const loadData = async () => {
+    const loadedPosts = await loadPosts()
     setPosts(loadedPosts)
     
     if (loadedPosts.length > 0) {
@@ -130,6 +135,7 @@ function Dashboard() {
       setInsights(generateInsights(loadedPosts))
       updateActiveUsersData(loadedPosts, periodType)
       setNewVsReturning(calculateNewVsReturningMembers(loadedPosts))
+      setUniqueVisitors(calculateUniqueVisitors(loadedPosts))
       
       // Calculate user breakdown for verification
       calculateUserBreakdown(loadedPosts)
@@ -193,12 +199,17 @@ function Dashboard() {
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Unique Users</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Unique Visitors</p>
               <p className="text-3xl font-bold text-gray-800 dark:text-white">
-                {new Set(posts.map(p => p.userId || p.author).filter(Boolean)).size}
+                {uniqueVisitors?.total || 0}
               </p>
+              {uniqueVisitors?.locationsWithData > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {uniqueVisitors.locationsWithData} locations
+                </p>
+              )}
             </div>
-            <Users className="text-comdirect-yellow" size={40} />
+            <Eye className="text-comdirect-blue" size={40} />
           </div>
         </div>
         
@@ -550,6 +561,43 @@ function Dashboard() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Unique Visitors by Location */}
+      {uniqueVisitors && uniqueVisitors.topCountries.length > 0 && (
+        <div className="card mb-8">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Unique Visitors by Country</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Top Countries</h3>
+              <div className="space-y-2">
+                {uniqueVisitors.topCountries.slice(0, 5).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                    <span className="text-sm text-gray-800 dark:text-gray-200">{item.country}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-semibold text-comdirect-blue">{item.visitors}</span>
+                      <span className="text-xs text-gray-500">({item.percentage}%)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Top Locations</h3>
+              <div className="space-y-2">
+                {uniqueVisitors.topLocations.slice(0, 5).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                    <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.location}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-semibold text-comdirect-blue">{item.visitors}</span>
+                      <span className="text-xs text-gray-500">({item.percentage}%)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top Topics */}
       <div className="card">

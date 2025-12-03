@@ -7,6 +7,7 @@ import {
   generateInsights,
   calculateActiveUsersByPeriod,
   calculateNewVsReturningMembers,
+  calculateNewVsReturningMembersByPeriod,
   calculateUniqueVisitors
 } from '../utils/textAnalysis'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
@@ -22,6 +23,7 @@ function Dashboard() {
   const [insights, setInsights] = useState([])
   const [mauData, setMauData] = useState([])
   const [newVsReturning, setNewVsReturning] = useState(null)
+  const [newVsReturningByPeriod, setNewVsReturningByPeriod] = useState([])
   const [showVerification, setShowVerification] = useState(false)
   const [userBreakdown, setUserBreakdown] = useState(null)
   const [periodType, setPeriodType] = useState('monthly') // 'weekly', 'monthly', 'quarterly'
@@ -36,6 +38,7 @@ function Dashboard() {
 
   const updateActiveUsersData = (postsToAnalyze, period) => {
     setMauData(calculateActiveUsersByPeriod(postsToAnalyze, period))
+    setNewVsReturningByPeriod(calculateNewVsReturningMembersByPeriod(postsToAnalyze, period))
   }
 
   useEffect(() => {
@@ -135,6 +138,7 @@ function Dashboard() {
       setInsights(generateInsights(loadedPosts))
       updateActiveUsersData(loadedPosts, periodType)
       setNewVsReturning(calculateNewVsReturningMembers(loadedPosts))
+      setNewVsReturningByPeriod(calculateNewVsReturningMembersByPeriod(loadedPosts, periodType))
       setUniqueVisitors(calculateUniqueVisitors(loadedPosts))
       
       // Calculate user breakdown for verification
@@ -316,74 +320,76 @@ function Dashboard() {
           <div className="card">
             <div className="flex items-center space-x-2 mb-4">
               <UserPlus className="text-comdirect-yellow" size={24} />
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">New vs Returning Members</h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+                {periodType === 'weekly' ? 'Weekly' : periodType === 'quarterly' ? 'Quarterly' : 'Monthly'} New vs Returning Members
+              </h2>
             </div>
-            {!newVsReturning?.hasMultipleMonths && newVsReturning?.currentMonth.total > 0 && (
-              <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  ⚠️ <strong>Limited Data:</strong> Only {newVsReturning.availableMonths} month(s) of data available. 
-                  All users appear as "new" because we can't compare to previous months. 
-                  Collect data from multiple months to see returning users.
-                </p>
-              </div>
-            )}
-            {newVsReturning && newVsReturning.currentMonth.total > 0 ? (
+            {newVsReturningByPeriod.length > 0 ? (
               <>
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={newVsReturning.chartData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {newVsReturning.chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={newVsReturningByPeriod}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="displayPeriod" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={80}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis />
                     <Tooltip />
-                  </PieChart>
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="new" 
+                      stroke="#00A0E3" 
+                      strokeWidth={2}
+                      name="New Members"
+                      dot={{ fill: '#00A0E3', r: 4 }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="returning" 
+                      stroke="#FFD500" 
+                      strokeWidth={2}
+                      name="Returning Members"
+                      dot={{ fill: '#FFD500', r: 4 }}
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">New Members:</span>
-                    <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                      {newVsReturning.currentMonth.new}
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      {periodType === 'weekly' ? 'Latest Week' : periodType === 'quarterly' ? 'Current Quarter' : 'Current Month'}:
+                    </span>
+                    <span className="text-lg font-bold text-gray-800 dark:text-white">
+                      {newVsReturningByPeriod.length > 0 ? newVsReturningByPeriod[newVsReturningByPeriod.length - 1]?.total || 0 : 0} users
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Returning Members:</span>
-                    <span className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
-                      {newVsReturning.currentMonth.returning}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Active:</span>
-                    <span className="text-xl font-bold text-gray-800 dark:text-white">
-                      {newVsReturning.currentMonth.total}
-                    </span>
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">New:</span>
+                      <span className="text-base font-bold text-blue-600 dark:text-blue-400">
+                        {newVsReturningByPeriod.length > 0 ? newVsReturningByPeriod[newVsReturningByPeriod.length - 1]?.new || 0 : 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Returning:</span>
+                      <span className="text-base font-bold text-yellow-600 dark:text-yellow-400">
+                        {newVsReturningByPeriod.length > 0 ? newVsReturningByPeriod[newVsReturningByPeriod.length - 1]?.returning || 0 : 0}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </>
             ) : (
               <div className="py-8">
-                <p className="text-gray-500 dark:text-gray-400 text-center mb-2">No user activity data for current month</p>
+                <p className="text-gray-500 dark:text-gray-400 text-center mb-2">No user activity data available</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
                   {posts.length > 0 
-                    ? 'No users found in current month data. Try collecting data for the current month.'
+                    ? 'Posts may not have user identifiers. Try collecting fresh data from the Data Collector.'
                     : 'Collect posts first to see user analytics.'}
                 </p>
-                {newVsReturning && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Current month total: {newVsReturning.currentMonth.total} users
-                    </p>
-                  </div>
-                )}
               </div>
             )}
           </div>

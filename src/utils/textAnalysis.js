@@ -346,6 +346,120 @@ export const calculateMonthlyActiveUsers = (posts) => {
 }
 
 /**
+ * Calculate New vs Returning members by period (weekly, monthly, quarterly)
+ * Returns an array of period data with new and returning user counts
+ */
+export const calculateNewVsReturningMembersByPeriod = (posts, periodType = 'monthly') => {
+  if (!posts || posts.length === 0) return []
+  
+  const getPeriodKey = (date, type) => {
+    const year = date.getFullYear()
+    const month = date.getMonth() + 1
+    
+    if (type === 'weekly') {
+      const startOfYear = new Date(year, 0, 1)
+      const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000))
+      const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7)
+      return `${year}-W${String(weekNumber).padStart(2, '0')}`
+    } else if (type === 'quarterly') {
+      const quarter = Math.floor(month / 3) + (month % 3 === 0 ? 0 : 1)
+      return `${year}-Q${quarter}`
+    } else {
+      return `${year}-${String(month).padStart(2, '0')}`
+    }
+  }
+  
+  const formatPeriodForDisplay = (periodKey, type) => {
+    if (type === 'weekly') {
+      const [year, week] = periodKey.split('-W')
+      return `W${week} ${year}`
+    } else if (type === 'quarterly') {
+      const [year, quarter] = periodKey.split('-Q')
+      return `Q${quarter} ${year}`
+    } else {
+      return formatMonthForDisplay(periodKey)
+    }
+  }
+  
+  // Group posts by period and track users per period
+  const periodData = {}
+  
+  posts.forEach(post => {
+    if (!post || !post.date) return
+    
+    try {
+      const date = new Date(post.date)
+      if (isNaN(date.getTime())) return
+      
+      const periodKey = getPeriodKey(date, periodType)
+      
+      if (!periodData[periodKey]) {
+        periodData[periodKey] = new Set()
+      }
+      
+      const userIdentifier = post.userId || post.author || null
+      
+      // Skip anonymous/deleted users and empty identifiers
+      if (!userIdentifier || 
+          userIdentifier === '-1' || 
+          userIdentifier === 'ehemaliger Nutzer' || 
+          userIdentifier === 'unknown' ||
+          String(userIdentifier).trim() === '') {
+        return
+      }
+      
+      const cleanIdentifier = String(userIdentifier).trim()
+      periodData[periodKey].add(cleanIdentifier)
+    } catch (error) {
+      console.warn('Error processing post for New vs Returning by Period:', error, post)
+    }
+  })
+  
+  // Get all periods sorted chronologically
+  const periods = Object.keys(periodData).sort((a, b) => a.localeCompare(b))
+  
+  if (periods.length === 0) return []
+  
+  // For each period, calculate new vs returning
+  // A user is "new" if they haven't appeared in any previous period
+  // A user is "returning" if they appeared in at least one previous period
+  const result = []
+  const allPreviousUsers = new Set()
+  
+  periods.forEach((periodKey, index) => {
+    const currentPeriodUsers = periodData[periodKey]
+    const newUsers = new Set()
+    const returningUsers = new Set()
+    
+    // Check each user in current period
+    currentPeriodUsers.forEach(user => {
+      if (allPreviousUsers.has(user)) {
+        returningUsers.add(user)
+      } else {
+        newUsers.add(user)
+      }
+    })
+    
+    // Add current period users to the set of all previous users
+    // (for next period's calculation)
+    currentPeriodUsers.forEach(user => allPreviousUsers.add(user))
+    
+    result.push({
+      period: periodKey,
+      displayPeriod: formatPeriodForDisplay(periodKey, periodType),
+      new: newUsers.size,
+      returning: returningUsers.size,
+      total: currentPeriodUsers.size
+    })
+  })
+  
+  const periodName = periodType === 'weekly' ? 'weeks' : periodType === 'quarterly' ? 'quarters' : 'months'
+  console.log(`📊 New vs Returning by Period (${periodType}): ${result.length} ${periodName}`)
+  
+  return result
+}
+
+/**
  * Calculate New vs Returning members
  * Compares users in the most recent month in dataset vs all previous months in dataset
  */
@@ -609,6 +723,7 @@ export default {
   calculateMonthlyActiveUsers,
   calculateActiveUsersByPeriod,
   calculateNewVsReturningMembers,
+  calculateNewVsReturningMembersByPeriod,
   calculateUniqueVisitors
 }
 

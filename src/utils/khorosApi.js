@@ -145,45 +145,40 @@ const getProxyBaseUrl = () => {
       const isProduction = import.meta.env.PROD || (typeof window !== 'undefined' && !window.location.origin.includes('localhost'))
       
       // Reject localhost URLs in production - they cause CORS errors
+      // Skip this proxy URL and fall through to default
       if (isProduction && (proxyUrl.includes('localhost') || proxyUrl.includes('127.0.0.1'))) {
         console.warn('⚠️ Ignoring localhost proxy URL in production. Using Vercel serverless function instead.')
         console.warn('   To fix: Remove VITE_KHOROS_PROXY_URL from Vercel environment variables, or set it to your Vercel URL.')
-        return null // Fall back to default
-      }
-      
-      // If proxyUrl is already a full URL (starts with http:// or https://), use it directly
-      if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
-        const url = new URL(proxyUrl)
-        
-        let pathname = url.pathname.replace(/\/+$/, '')
-        if (pathname.endsWith('/posts')) {
-          pathname = pathname.slice(0, -('/posts'.length))
+        // Fall through to default return at end of function
+      } else {
+        // If proxyUrl is already a full URL (starts with http:// or https://), use it directly
+        if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
+          const url = new URL(proxyUrl)
+          
+          let pathname = url.pathname.replace(/\/+$/, '')
+          if (pathname.endsWith('/posts')) {
+            pathname = pathname.slice(0, -('/posts'.length))
+          }
+          return `${url.origin}${pathname}`
         }
-        return `${url.origin}${pathname}`
+        
+        // Relative path - construct from current origin
+        const origin = typeof window !== 'undefined' ? window.location.origin : ''
+        if (!origin) {
+          console.warn('Cannot determine origin for proxy URL construction')
+          // Fall through to default
+        } else {
+          const url = new URL(proxyUrl, origin)
+          let pathname = url.pathname.replace(/\/+$/, '')
+          if (pathname.endsWith('/posts')) {
+            pathname = pathname.slice(0, -('/posts'.length))
+          }
+          return `${url.origin}${pathname}`
+        }
       }
-      
-      // Relative path - construct from current origin
-      const origin = typeof window !== 'undefined' ? window.location.origin : ''
-      if (!origin) {
-        console.warn('Cannot determine origin for proxy URL construction')
-        return null
-      }
-      
-      // Don't allow localhost in production
-      if (origin.includes('localhost') && import.meta.env.PROD) {
-        console.error('❌ ERROR: Cannot use localhost proxy in production!')
-        return null
-      }
-      
-      const url = new URL(proxyUrl, origin)
-      let pathname = url.pathname.replace(/\/+$/, '')
-      if (pathname.endsWith('/posts')) {
-        pathname = pathname.slice(0, -('/posts'.length))
-      }
-      return `${url.origin}${pathname}`
     } catch (error) {
       console.warn('Invalid proxy URL configuration:', KHOROS_API_CONFIG.proxyUrl, error)
-      return null
+      // Fall through to default
     }
   }
   
@@ -301,7 +296,9 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     // Always use Vercel serverless function (proxy) to bypass CORS
     // The serverless function handles authentication server-side
     const proxyBase = getProxyBaseUrl()
+    // getProxyBaseUrl() should always return a value (defaults to '/api/khoros')
     if (!proxyBase) {
+      console.error('❌ Failed to determine proxy endpoint. This should not happen.')
       throw new Error('Cannot determine proxy endpoint. Please ensure the Vercel serverless function is deployed at /api/khoros/posts')
     }
     

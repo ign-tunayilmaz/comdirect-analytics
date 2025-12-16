@@ -104,10 +104,24 @@ function DataCollector() {
     
     const fromDate = new Date(filters.dateFrom)
     const toDate = new Date(filters.dateTo)
+    const today = new Date()
+    today.setHours(23, 59, 59, 999) // End of today
+    
     const daysDiff = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24))
     
     if (daysDiff < 0) {
       setStatus('❌ Error: "From Date" must be before "To Date".')
+      return
+    }
+    
+    // Check if dates are in the future
+    if (fromDate > today) {
+      setStatus('❌ Error: "From Date" cannot be in the future. Please select a date today or earlier.')
+      return
+    }
+    
+    if (toDate > today) {
+      setStatus('❌ Error: "To Date" cannot be in the future. Please select a date today or earlier.')
       return
     }
     
@@ -163,15 +177,22 @@ function DataCollector() {
         setStatus(`🔄 ${progressMsg}`)
         
         try {
-      const result = await fetchCommunityPosts({
-        limit: 999999, // Fetch all data - no limit for MAU calculation
-        filters: {
-          requestType: filters.requestType || undefined,
+          console.log(`🔍 Fetching data for period ${i + 1}/${dateRanges.length}:`, range)
+          const result = await fetchCommunityPosts({
+            limit: 999999, // Fetch all data - no limit for MAU calculation
+            filters: {
+              requestType: filters.requestType || undefined,
               platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
               language: filters.language || undefined,
               dateFrom: range.dateFrom,
               dateTo: range.dateTo
             }
+          })
+          
+          console.log(`📊 Period ${i + 1} result:`, {
+            total: result.total,
+            postsCount: result.posts.length,
+            source: result.source
           })
           
           // Use loop instead of spread/apply to avoid stack overflow with large arrays
@@ -185,11 +206,21 @@ function DataCollector() {
           setProgress(currentProgress)
           setProgressText(`Period ${i + 1}/${dateRanges.length} complete: ${result.posts.length} posts collected`)
           
-          console.log(`✅ Period ${i + 1}/${dateRanges.length}: Collected ${result.posts.length} posts`)
+          if (result.posts.length === 0) {
+            console.warn(`⚠️ Period ${i + 1}/${dateRanges.length}: No posts collected for ${range.dateFrom} to ${range.dateTo}`)
+            setStatus(`⚠️ Period ${i + 1}: No data found for ${range.dateFrom} to ${range.dateTo}. Check console for details.`)
+          } else {
+            console.log(`✅ Period ${i + 1}/${dateRanges.length}: Collected ${result.posts.length} posts`)
+          }
         } catch (error) {
           console.error(`❌ Error collecting period ${i + 1}:`, error)
+          console.error('   Error details:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+          })
           // Continue with other periods even if one fails
-          setStatus(`⚠️ Warning: Failed to collect period ${i + 1}, continuing with remaining periods...`)
+          setStatus(`❌ Error collecting period ${i + 1}: ${error.message}. Check console for details.`)
           await new Promise(resolve => setTimeout(resolve, 1000)) // Brief pause before next request
         }
       }
@@ -247,11 +278,23 @@ function DataCollector() {
   }
 
   const handleClearData = async () => {
-    if (window.confirm('Are you sure you want to clear all collected data?')) {
-      await clearPosts()
-      setPosts([])
-      setStatus('All data cleared.')
-      setTimeout(() => setStatus(''), 3000)
+    if (window.confirm('Are you sure you want to clear all collected data? This will remove all posts from both localStorage and IndexedDB.')) {
+      try {
+        setLoading(true)
+        setStatus('🔄 Clearing all data...')
+        await clearPosts()
+        setPosts([])
+        setStatus('✅ All data cleared successfully! Refreshing...')
+        
+        // Force a page reload to ensure IndexedDB is fully cleared
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
+      } catch (error) {
+        console.error('Error clearing data:', error)
+        setStatus('❌ Error clearing data: ' + error.message)
+        setLoading(false)
+      }
     }
   }
 

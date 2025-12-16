@@ -137,20 +137,63 @@ export const loadPostsFromIndexedDB = async () => {
  */
 export const clearIndexedDB = async () => {
   try {
+    // First, try to clear the object store
     const db = await openDB()
     const transaction = db.transaction([STORE_NAME], 'readwrite')
     const store = transaction.objectStore(STORE_NAME)
-    const request = store.clear()
+    const clearRequest = store.clear()
     
     await new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
+      clearRequest.onsuccess = () => {
+        console.log('✅ Cleared IndexedDB object store')
+        resolve()
+      }
+      clearRequest.onerror = () => reject(clearRequest.error)
+    })
+    
+    // Wait for transaction to complete
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
     })
     
     db.close()
-    console.log('✅ Cleared IndexedDB')
+    
+    // Also try to delete the entire database as a more aggressive approach
+    try {
+      const deleteRequest = indexedDB.deleteDatabase(DB_NAME)
+      await new Promise((resolve, reject) => {
+        deleteRequest.onsuccess = () => {
+          console.log('✅ Deleted IndexedDB database')
+          resolve()
+        }
+        deleteRequest.onerror = () => {
+          console.warn('⚠️ Could not delete database (may be in use):', deleteRequest.error)
+          resolve() // Don't fail if deletion is blocked
+        }
+        deleteRequest.onblocked = () => {
+          console.warn('⚠️ Database deletion blocked - may be in use')
+          resolve() // Don't fail if blocked
+        }
+      })
+    } catch (deleteError) {
+      console.warn('⚠️ Error deleting database (non-critical):', deleteError)
+    }
+    
+    console.log('✅ IndexedDB cleared successfully')
   } catch (error) {
     console.error('❌ Error clearing IndexedDB:', error)
+    // Try to delete database as fallback
+    try {
+      const deleteRequest = indexedDB.deleteDatabase(DB_NAME)
+      await new Promise((resolve) => {
+        deleteRequest.onsuccess = () => resolve()
+        deleteRequest.onerror = () => resolve()
+        deleteRequest.onblocked = () => resolve()
+      })
+    } catch (e) {
+      console.error('❌ Failed to delete database:', e)
+    }
     throw error
   }
 }

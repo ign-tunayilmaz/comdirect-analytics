@@ -180,7 +180,19 @@ export const fetchCommunityPosts = async (options = {}) => {
   
   // Check if Khoros API is configured
   if (!isApiConfigured()) {
-    throw new Error('❌ Khoros API is not configured. Please add your API credentials to .env.local file.')
+    const proxyUrl = import.meta.env.VITE_KHOROS_PROXY_URL || ''
+    const hasProxy = proxyUrl && proxyUrl.trim() !== ''
+    const isProduction = import.meta.env.MODE === 'production'
+    
+    let errorMessage = '❌ Khoros API is not configured.'
+    if (isProduction) {
+      errorMessage += ' For production builds, set VITE_KHOROS_PROXY_URL as a GitHub secret and update .github/workflows/deploy.yml to use it during build.'
+    } else {
+      errorMessage += hasProxy
+        ? ' Please check your VITE_KHOROS_PROXY_URL environment variable.'
+        : ' Please add your API credentials to .env.local file or configure VITE_KHOROS_PROXY_URL.'
+    }
+    throw new Error(errorMessage)
   }
   
   console.log('🔌 Khoros API is configured - fetching real data...')
@@ -416,10 +428,17 @@ const migratePosts = (posts) => {
  */
 export const loadPosts = async () => {
   try {
+    // Check if data was explicitly cleared (don't reload from IndexedDB if cleared)
+    const wasCleared = sessionStorage.getItem('comdirect_data_cleared') === 'true'
+    if (wasCleared) {
+      console.log('📭 Data was cleared, skipping IndexedDB fallback')
+      sessionStorage.removeItem('comdirect_data_cleared') // Clear the flag
+    }
+    
     // Check if we're using IndexedDB
     const useIndexedDB = localStorage.getItem('comdirect_use_indexeddb') === 'true'
     
-    if (useIndexedDB && isIndexedDBAvailable()) {
+    if (useIndexedDB && isIndexedDBAvailable() && !wasCleared) {
       console.log('📂 Loading posts from IndexedDB...')
       const posts = await loadPostsFromIndexedDB()
       
@@ -434,8 +453,8 @@ export const loadPosts = async () => {
     const posts = JSON.parse(localStorage.getItem('comdirect_posts') || '[]')
     
     if (!posts || !Array.isArray(posts) || posts.length === 0) {
-      // Try IndexedDB as fallback
-      if (isIndexedDBAvailable()) {
+      // Only try IndexedDB as fallback if data wasn't explicitly cleared
+      if (isIndexedDBAvailable() && !wasCleared) {
         console.log('📂 No posts in localStorage, trying IndexedDB...')
         const idbPosts = await loadPostsFromIndexedDB()
         if (idbPosts && idbPosts.length > 0) {
@@ -492,18 +511,94 @@ export const loadPosts = async () => {
 
 /**
  * Clear all stored posts (from both localStorage and IndexedDB)
+ * This function comprehensively clears all data storage
  */
 export const clearPosts = async () => {
-  localStorage.removeItem('comdirect_posts')
-  localStorage.removeItem('comdirect_use_indexeddb')
+  console.log('🗑️ Starting data clear process...')
   
+  // Set a flag to prevent reloading from IndexedDB after clear
+  try {
+    sessionStorage.setItem('comdirect_data_cleared', 'true')
+  } catch (e) {
+    console.warn('⚠️ Could not set clear flag:', e)
+  }
+  
+  // Clear all localStorage items related to the app
+  try {
+    localStorage.removeItem('comdirect_posts')
+    localStorage.removeItem('comdirect_use_indexeddb')
+    console.log('✅ Cleared localStorage items')
+  } catch (error) {
+    console.error('❌ Error clearing localStorage:', error)
+  }
+  
+  // Clear any other potential localStorage keys
+  try {
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('comdirect_')) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => {
+      try {
+        localStorage.removeItem(key)
+        console.log(`✅ Removed localStorage key: ${key}`)
+      } catch (e) {
+        console.warn(`⚠️ Could not remove key ${key}:`, e)
+      }
+    })
+  } catch (error) {
+    console.error('❌ Error clearing additional localStorage keys:', error)
+  }
+  
+  // Clear IndexedDB - this is the critical part
   if (isIndexedDBAvailable()) {
     try {
+      console.log('🗑️ Clearing IndexedDB...')
       await clearIndexedDB()
+      console.log('✅ IndexedDB cleared')
     } catch (error) {
-      console.error('Error clearing IndexedDB:', error)
+      console.error('❌ Error clearing IndexedDB:', error)
+      // Try to delete the database entirely as a fallback
+      try {
+        console.log('🗑️ Attempting to delete IndexedDB database...')
+        const deleteRequest = indexedDB.deleteDatabase('comdirect_analytics')
+        await new Promise((resolve) => {
+          deleteRequest.onsuccess = () => {
+            console.log('✅ Deleted IndexedDB database')
+            resolve()
+          }
+          deleteRequest.onerror = () => {
+            console.warn('⚠️ Error deleting database:', deleteRequest.error)
+            resolve() // Continue anyway
+          }
+          deleteRequest.onblocked = () => {
+            console.warn('⚠️ Database deletion blocked - may be in use')
+            resolve() // Continue anyway
+          }
+        })
+      } catch (deleteError) {
+        console.error('❌ Error deleting IndexedDB database:', deleteError)
+      }
+    }
+  } else {
+    console.log('ℹ️ IndexedDB not available, skipping')
+  }
+  
+  // Double-check: verify localStorage is cleared
+  const remainingPosts = localStorage.getItem('comdirect_posts')
+  if (remainingPosts) {
+    console.warn('⚠️ Warning: localStorage still contains data after clear')
+    try {
+      localStorage.removeItem('comdirect_posts')
+    } catch (e) {
+      console.error('❌ Failed to remove remaining data:', e)
     }
   }
+  
+  console.log('✅ All data cleared successfully')
 }
 
 export default {

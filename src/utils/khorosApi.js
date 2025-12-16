@@ -15,10 +15,19 @@ const KHOROS_API_CONFIG = {
   proxyUrl: import.meta.env.VITE_KHOROS_PROXY_URL || '', // Use proxy to bypass CORS
 }
 
-// Include all event types to capture all unique visitors (not just posters)
-// Key event types: messages.publish (posts), view (page views), visits.visit-summary (visits)
-// Empty array means include ALL event types
-const ALLOWED_EVENT_TYPES = [] // Include all event types for accurate visitor counts
+// Only include actual post/message event types
+// Key event types: 
+// - messages.publish (new posts/messages)
+// - messages.reply (replies to posts)
+// Exclude: view (page views), visits.visit-summary (visits), rss.feed-request (RSS views)
+const ALLOWED_EVENT_TYPES = [
+  'messages.publish',
+  'messages.reply',
+  'message.publish',
+  'message.reply',
+  'post',
+  'reply'
+] // Only include actual posts/messages, not views or visits
 
 const parseTimestampValue = (value) => {
   if (value === undefined || value === null) return null
@@ -193,8 +202,17 @@ const fetchMessageDetails = async (messageIds = []) => {
 
 /**
  * Check if API is properly configured
+ * Returns true if either:
+ * 1. Direct API credentials are available (communityId + accessToken), OR
+ * 2. Proxy URL is configured (proxy handles credentials server-side)
  */
 export const isApiConfigured = () => {
+  // If proxy URL is configured, we don't need direct credentials
+  if (KHOROS_API_CONFIG.proxyUrl && KHOROS_API_CONFIG.proxyUrl.trim() !== '') {
+    return true
+  }
+  
+  // Otherwise, check for direct API credentials
   return !!(KHOROS_API_CONFIG.communityId && 
            KHOROS_API_CONFIG.accessToken)
 }
@@ -275,13 +293,39 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
       throw new Error(`Khoros API error: ${response.status} ${response.statusText}`)
     }
 
-    const data = await response.json()
+    // Check if response is JSON or text
+    let data
+    const contentType = response.headers.get('content-type') || ''
+    
+    if (contentType.includes('application/json')) {
+      data = await response.json()
+    } else {
+      // Try to parse as JSON anyway (some APIs don't set content-type correctly)
+      const text = await response.text()
+      try {
+        data = JSON.parse(text)
+      } catch (e) {
+        console.error('❌ Response is not valid JSON:', text.substring(0, 500))
+        throw new Error(`Invalid JSON response from API. Response: ${text.substring(0, 200)}`)
+      }
+    }
+    
     console.log('✅ Khoros API Response received')
-    console.log('📦 Response structure:', Object.keys(data))
-    console.log('📦 Full response (first 500 chars):', JSON.stringify(data).substring(0, 500))
+    console.log('📦 Response type:', typeof data)
+    console.log('📦 Response structure:', data ? Object.keys(data) : 'null/undefined')
+    console.log('📦 Response has records?', data?.records ? `Yes (${data.records.length} records)` : 'No')
+    console.log('📦 Full response (first 1000 chars):', JSON.stringify(data).substring(0, 1000))
+
+    // Check for error in response
+    if (data.error) {
+      console.error('❌ API returned error:', data.error)
+      throw new Error(`Khoros API error: ${data.error}${data.details ? ' - ' + JSON.stringify(data.details) : ''}`)
+    }
 
     // Transform Khoros data to our format
     let posts = transformKhorosData(data, { limit, category, sentiment, startDate: fromDate, endDate: toDate })
+
+    console.log(`📊 After transformation: ${posts.length} posts`)
 
     posts = await hydratePostsWithContent(posts)
     
@@ -289,6 +333,12 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     
     if (posts.length > 0) {
       console.log('📝 Sample post:', posts[0])
+    } else {
+      console.warn('⚠️ No posts returned. This could mean:')
+      console.warn('   1. No data exists for the selected date range')
+      console.warn('   2. All records were filtered out')
+      console.warn('   3. API response format has changed')
+      console.warn('   Check the console logs above for the raw API response')
     }
     
     return posts
@@ -356,8 +406,17 @@ const transformKhorosData = (khorosResponse, options = {}) => {
   
   // If still no messages, log the response structure for debugging
   if (messages.length === 0) {
-    console.log('⚠️ No messages found. Response keys:', Object.keys(khorosResponse))
-    console.log('⚠️ Response sample:', JSON.stringify(khorosResponse).substring(0, 200))
+    console.warn('⚠️ No messages found in response')
+    console.warn('   Response type:', typeof khorosResponse)
+    console.warn('   Response keys:', khorosResponse ? Object.keys(khorosResponse) : 'null/undefined')
+    console.warn('   Has records?', khorosResponse?.records ? `Yes (${khorosResponse.records.length})` : 'No')
+    console.warn('   Has data?', khorosResponse?.data ? 'Yes' : 'No')
+    console.warn('   Response sample:', JSON.stringify(khorosResponse).substring(0, 500))
+    
+    // If we have records but they're empty, that's different from no records key
+    if (khorosResponse?.records && Array.isArray(khorosResponse.records) && khorosResponse.records.length === 0) {
+      console.warn('   ⚠️ Records array exists but is empty - API returned no data for this date range')
+    }
   }
 
   console.log(`📊 Processing ${messages.length} messages from API response`)
@@ -385,38 +444,50 @@ const transformKhorosData = (khorosResponse, options = {}) => {
       if (!msg || typeof msg !== 'object') return false
 
       const eventType = String(msg.eventType || '').toLowerCase()
+      
+      // Only allow post/message event types
       if (allowedEventTypesLower.length > 0 && !allowedEventTypesLower.includes(eventType)) {
         return false
       }
       
-      // For visitor analytics, we need ALL events (including views without topicId)
-      // View events don't require topicTitle or topicId - they're still valid visitors
-      const isViewEvent = eventType === 'view' || eventType === 'visits.visit-summary' || eventType === 'rss.feed-request'
+      // Explicitly exclude view events, visit summaries, and RSS feed requests
+      const isViewEvent = eventType === 'view' || 
+                         eventType === 'visits.visit-summary' || 
+                         eventType === 'rss.feed-request' ||
+                         eventType === 'visit' ||
+                         eventType === 'visits.visit'
       
-      // For non-view events (posts), we require topic title
-      if (!isViewEvent) {
-        const topicTitle = msg.topicTitle || msg.subject || msg.title || ''
-        
-        // Filter out empty titles (only for non-view events)
-        if (!topicTitle || topicTitle.trim() === '') {
-          return false
-        }
-        
-        // Filter out "No subject" posts
-        if (topicTitle === 'No subject') {
-          return false
-        }
-        
-        // Filter out CSV header values (in case header wasn't skipped properly)
-        const headerValues = ['conversation.title', 'user.login', 'conversation.uid', 'board.title', 'board.uid']
-        if (headerValues.includes(topicTitle)) {
-          return false
-        }
-        
-        // For post events, we require topicId
-        if (!msg.topicId || String(msg.topicId).trim() === '') {
-          return false
-        }
+      if (isViewEvent) {
+        return false // Exclude all view/visit events
+      }
+      
+      // For posts, we require topic title
+      const topicTitle = msg.topicTitle || msg.subject || msg.title || ''
+      
+      // Filter out empty titles
+      if (!topicTitle || topicTitle.trim() === '') {
+        return false
+      }
+      
+      // Filter out "No subject" posts
+      if (topicTitle === 'No subject') {
+        return false
+      }
+      
+      // Filter out CSV header values (in case header wasn't skipped properly)
+      const headerValues = ['conversation.title', 'user.login', 'conversation.uid', 'board.title', 'board.uid']
+      if (headerValues.includes(topicTitle)) {
+        return false
+      }
+      
+      // For post events, we require topicId
+      if (!msg.topicId || String(msg.topicId).trim() === '') {
+        return false
+      }
+      
+      // Filter out entries that look like view events based on topic title
+      if (topicTitle.toLowerCase().includes('view event')) {
+        return false
       }
 
       const msgDate = getMessageDate(msg)
@@ -443,16 +514,24 @@ const transformKhorosData = (khorosResponse, options = {}) => {
     .map(msg => {
       // LSI Data Export API returns CSV data that our proxy parses
       // The proxy extracts: topicTitle, boardTitle, username, timestamp, etc.
+      // View events should already be filtered out above, but double-check
+      const eventType = String(msg.eventType || '').toLowerCase()
+      const isViewEvent = eventType === 'view' || 
+                         eventType === 'visits.visit-summary' || 
+                         eventType === 'rss.feed-request' ||
+                         eventType === 'visit' ||
+                         eventType === 'visits.visit'
+      
+      if (isViewEvent) {
+        return null // Will be filtered out at the end
+      }
       
       // Extract title from CSV-parsed fields
-      // For view events, use event type as title if no topic title available
-      const eventType = String(msg.eventType || '').toLowerCase()
-      const isViewEvent = eventType === 'view' || eventType === 'visits.visit-summary' || eventType === 'rss.feed-request'
-      
+      // Only use actual topic titles, never generate titles for view events
       const title = msg.topicTitle || 
                     msg.subject || 
                     msg.title || 
-                    (isViewEvent ? `View Event (${eventType})` : 'No subject')
+                    'No subject'
       
       // Extract body/content - CSV doesn't include message body
       // This is activity/analytics data, not message content
@@ -517,8 +596,9 @@ const transformKhorosData = (khorosResponse, options = {}) => {
         location: msg.city && msg.country ? `${msg.city}, ${msg.country}` : null // Add location data
       }
     })
+    .filter(post => post !== null) // Remove any null entries (view events that slipped through)
 
-  console.log(`✅ Transformed ${transformedPosts.length} posts`)
+  console.log(`✅ Transformed ${transformedPosts.length} posts (excluding view events)`)
   return transformedPosts
 }
 

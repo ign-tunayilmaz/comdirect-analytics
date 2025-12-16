@@ -136,38 +136,49 @@ const stripHtml = (html) => {
 }
 
 const getProxyBaseUrl = () => {
-  if (!KHOROS_API_CONFIG.proxyUrl) return null
-  try {
-    const proxyUrl = KHOROS_API_CONFIG.proxyUrl.split('?')[0]
-    
-    // If proxyUrl is already a full URL (starts with http:// or https://), use it directly
-    if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
-      const url = new URL(proxyUrl)
+  // If proxy URL is explicitly configured, use it
+  if (KHOROS_API_CONFIG.proxyUrl && KHOROS_API_CONFIG.proxyUrl.trim() !== '') {
+    try {
+      const proxyUrl = KHOROS_API_CONFIG.proxyUrl.split('?')[0]
+      
+      // If proxyUrl is already a full URL (starts with http:// or https://), use it directly
+      if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
+        const url = new URL(proxyUrl)
+        let pathname = url.pathname.replace(/\/+$/, '')
+        if (pathname.endsWith('/posts')) {
+          pathname = pathname.slice(0, -('/posts'.length))
+        }
+        return `${url.origin}${pathname}`
+      }
+      
+      // Relative path - construct from current origin
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      if (!origin) {
+        console.warn('Cannot determine origin for proxy URL construction')
+        return null
+      }
+      
+      // Don't allow localhost in production
+      if (origin.includes('localhost') && import.meta.env.PROD) {
+        console.error('❌ ERROR: Cannot use localhost proxy in production!')
+        return null
+      }
+      
+      const url = new URL(proxyUrl, origin)
       let pathname = url.pathname.replace(/\/+$/, '')
       if (pathname.endsWith('/posts')) {
         pathname = pathname.slice(0, -('/posts'.length))
       }
       return `${url.origin}${pathname}`
-    }
-    
-    // Otherwise, construct from current origin (but avoid localhost in production)
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    if (!origin || origin.includes('localhost')) {
-      // In production, don't use localhost - use the proxy URL as-is if it's a full URL
-      console.warn('Cannot determine origin for proxy URL construction')
+    } catch (error) {
+      console.warn('Invalid proxy URL configuration:', KHOROS_API_CONFIG.proxyUrl, error)
       return null
     }
-    
-    const url = new URL(proxyUrl, origin)
-    let pathname = url.pathname.replace(/\/+$/, '')
-    if (pathname.endsWith('/posts')) {
-      pathname = pathname.slice(0, -('/posts'.length))
-    }
-    return `${url.origin}${pathname}`
-  } catch (error) {
-    console.warn('Invalid proxy URL configuration:', KHOROS_API_CONFIG.proxyUrl, error)
-    return null
   }
+  
+  // Default: Use Vercel serverless function (works in both dev and prod)
+  // This is a relative path, so it will work with the current origin
+  return '/api/khoros'
 }
 
 const getProxyEndpoint = (path = '') => {
@@ -221,18 +232,19 @@ const fetchMessageDetails = async (messageIds = []) => {
 /**
  * Check if API is properly configured
  * Returns true if either:
- * 1. Direct API credentials are available (communityId + accessToken), OR
- * 2. Proxy URL is configured (proxy handles credentials server-side)
+ * 1. Proxy is available (Vercel serverless function or explicit proxy URL), OR
+ * 2. Direct API credentials are available (communityId + accessToken)
+ * 
+ * Note: We always use the Vercel serverless function (/api/khoros/posts) by default,
+ * which handles credentials server-side via environment variables.
  */
 export const isApiConfigured = () => {
-  // If proxy URL is configured, we don't need direct credentials
-  if (KHOROS_API_CONFIG.proxyUrl && KHOROS_API_CONFIG.proxyUrl.trim() !== '') {
-    return true
-  }
-  
-  // Otherwise, check for direct API credentials
-  return !!(KHOROS_API_CONFIG.communityId && 
-           KHOROS_API_CONFIG.accessToken)
+  // Always use proxy (Vercel serverless function) - it handles credentials server-side
+  // The serverless function reads from Vercel environment variables:
+  // - KHOROS_COMMUNITY_ID
+  // - KHOROS_CLIENT_ID
+  // - KHOROS_ACCESS_TOKEN
+  return true
 }
 
 /**
@@ -275,41 +287,30 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     const fromDate = formatDate(startDateTime)
     const toDate = formatDate(endDateTime)
 
-    // Use proxy server if configured (to bypass CORS), otherwise direct API call
-    const useProxy = !!KHOROS_API_CONFIG.proxyUrl
-    let url, headers
-    
-    if (useProxy) {
-      // Use proxy server - no authentication needed (proxy handles it)
-      // Ensure proxy URL is a full URL (not relative) to avoid local network access requests
-      let proxyUrl = KHOROS_API_CONFIG.proxyUrl
-      
-      // If proxy URL is relative or contains localhost, warn in production
-      if (typeof window !== 'undefined' && window.location.origin.includes('vercel.app')) {
-        // We're in production on Vercel
-        if (proxyUrl.includes('localhost') || proxyUrl.startsWith('/')) {
-          console.error('❌ ERROR: Proxy URL contains localhost in production! This will trigger local network permission requests.')
-          console.error('   Current proxy URL:', proxyUrl)
-          console.error('   Please set VITE_KHOROS_PROXY_URL to your Vercel API endpoint: https://cmdr-analytics.vercel.app/api/khoros/posts')
-          throw new Error('Proxy URL is configured for localhost. In production, use your Vercel API endpoint instead.')
-        }
-      }
-      
-      url = `${proxyUrl}?fromDate=${fromDate}&toDate=${toDate}`
-      headers = {
-        'Accept': 'application/json',
-      }
-      console.log('🔄 Using proxy server to bypass CORS')
-    } else {
-      // Direct API call (will likely fail due to CORS in browser)
-      url = `${KHOROS_API_CONFIG.baseUrl}/${KHOROS_API_CONFIG.communityId}?fromDate=${fromDate}&toDate=${toDate}`
-      headers = {
-        'client-id': KHOROS_API_CONFIG.clientId,
-        'Authorization': `Basic ${btoa(`${KHOROS_API_CONFIG.accessToken}:`)}`,
-        'Accept': 'application/json',
-      }
-      console.log('⚠️ Direct API call (may fail due to CORS)')
+    // Always use Vercel serverless function (proxy) to bypass CORS
+    // The serverless function handles authentication server-side
+    const proxyBase = getProxyBaseUrl()
+    if (!proxyBase) {
+      throw new Error('Cannot determine proxy endpoint. Please ensure the Vercel serverless function is deployed at /api/khoros/posts')
     }
+    
+    // Construct the full proxy URL
+    // proxyBase is either a full URL (https://...) or a relative path (/api/khoros)
+    // We need to append /posts to get the final endpoint
+    let proxyUrl
+    if (proxyBase.startsWith('http://') || proxyBase.startsWith('https://')) {
+      // Full URL - append /posts
+      proxyUrl = `${proxyBase.replace(/\/+$/, '')}/posts`
+    } else {
+      // Relative path - append /posts
+      proxyUrl = `${proxyBase.replace(/\/+$/, '')}/posts`
+    }
+    
+    url = `${proxyUrl}?fromDate=${fromDate}&toDate=${toDate}`
+    headers = {
+      'Accept': 'application/json',
+    }
+    console.log('🔄 Using Vercel serverless function to bypass CORS')
     
     console.log('📡 API Request URL:', url)
     console.log('📅 Date Range:', fromDate, 'to', toDate)

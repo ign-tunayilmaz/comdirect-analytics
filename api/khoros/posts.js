@@ -5,7 +5,7 @@
  * Vercel will automatically create the route: /api/khoros/posts
  */
 
-const axios = require('axios');
+import axios from 'axios';
 
 // Helper function to parse CSV line with quoted field support
 const parseCSVLine = (line) => {
@@ -30,7 +30,7 @@ const parseCSVLine = (line) => {
   return fields;
 };
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

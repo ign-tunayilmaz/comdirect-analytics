@@ -40,11 +40,21 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
+  console.log('📥 Request received:', {
+    method: req.method,
+    query: req.query,
+    url: req.url
+  });
+
   const { fromDate, toDate } = req.query;
   
   if (!fromDate || !toDate) {
+    console.error('❌ Missing required parameters:', { fromDate, toDate });
     return res.status(400).json({ 
-      error: 'Missing required parameters: fromDate and toDate (format: YYYYMMDD)' 
+      error: {
+        code: '400',
+        message: 'Missing required parameters: fromDate and toDate (format: YYYYMMDD)'
+      }
     });
   }
 
@@ -55,11 +65,20 @@ module.exports = async (req, res) => {
     baseUrl: 'https://eu.api.lithium.com/lsi-data/v1/data/export/community'
   };
 
+  console.log('🔧 Khoros Config:', {
+    communityId: KHOROS_CONFIG.communityId,
+    hasClientId: !!KHOROS_CONFIG.clientId,
+    hasAccessToken: !!KHOROS_CONFIG.accessToken,
+    clientIdLength: KHOROS_CONFIG.clientId ? KHOROS_CONFIG.clientId.length : 0,
+    accessTokenLength: KHOROS_CONFIG.accessToken ? KHOROS_CONFIG.accessToken.length : 0
+  });
+
   if (!KHOROS_CONFIG.clientId || !KHOROS_CONFIG.accessToken) {
-    console.error('Missing Khoros credentials:', {
+    console.error('❌ Missing Khoros credentials:', {
       hasClientId: !!KHOROS_CONFIG.clientId,
       hasAccessToken: !!KHOROS_CONFIG.accessToken,
-      communityId: KHOROS_CONFIG.communityId
+      communityId: KHOROS_CONFIG.communityId,
+      envKeys: Object.keys(process.env).filter(k => k.includes('KHOROS'))
     });
     return res.status(500).json({ 
       error: {
@@ -72,6 +91,7 @@ module.exports = async (req, res) => {
 
   try {
     const url = `${KHOROS_CONFIG.baseUrl}/${KHOROS_CONFIG.communityId}?fromDate=${fromDate}&toDate=${toDate}`;
+    console.log('🌐 Calling Khoros API:', url);
     const basicAuth = Buffer.from(`${KHOROS_CONFIG.accessToken}:`).toString('base64');
 
     const response = await axios({

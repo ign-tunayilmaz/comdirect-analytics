@@ -329,9 +329,39 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error('❌ Khoros API Error Response:', errorText)
-      throw new Error(`Khoros API error: ${response.status} ${response.statusText}`)
+      let errorMessage = `Khoros API error: ${response.status} ${response.statusText}`
+      try {
+        // Clone the response to read it without consuming the original
+        const errorText = await response.clone().text()
+        console.error('❌ Khoros API Error Response:', errorText)
+        
+        // Try to parse as JSON
+        try {
+          const errorData = JSON.parse(errorText)
+          
+          // Handle different error response formats
+          if (errorData.error) {
+            if (typeof errorData.error === 'string') {
+              errorMessage = errorData.error
+            } else if (errorData.error.message) {
+              errorMessage = errorData.error.message
+              if (errorData.error.details) {
+                errorMessage += ` - ${typeof errorData.error.details === 'string' ? errorData.error.details : JSON.stringify(errorData.error.details)}`
+              }
+            }
+          } else if (errorData.message) {
+            errorMessage = errorData.message
+          }
+        } catch (parseError) {
+          // Not JSON, use the text as-is
+          if (errorText && errorText.length > 0) {
+            errorMessage += ` - ${errorText.substring(0, 200)}`
+          }
+        }
+      } catch (e) {
+        console.error('❌ Error reading error response:', e)
+      }
+      throw new Error(errorMessage)
     }
 
     // Check if response is JSON or text

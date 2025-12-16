@@ -139,7 +139,25 @@ const getProxyBaseUrl = () => {
   if (!KHOROS_API_CONFIG.proxyUrl) return null
   try {
     const proxyUrl = KHOROS_API_CONFIG.proxyUrl.split('?')[0]
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+    
+    // If proxyUrl is already a full URL (starts with http:// or https://), use it directly
+    if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
+      const url = new URL(proxyUrl)
+      let pathname = url.pathname.replace(/\/+$/, '')
+      if (pathname.endsWith('/posts')) {
+        pathname = pathname.slice(0, -('/posts'.length))
+      }
+      return `${url.origin}${pathname}`
+    }
+    
+    // Otherwise, construct from current origin (but avoid localhost in production)
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    if (!origin || origin.includes('localhost')) {
+      // In production, don't use localhost - use the proxy URL as-is if it's a full URL
+      console.warn('Cannot determine origin for proxy URL construction')
+      return null
+    }
+    
     const url = new URL(proxyUrl, origin)
     let pathname = url.pathname.replace(/\/+$/, '')
     if (pathname.endsWith('/posts')) {
@@ -263,7 +281,21 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     
     if (useProxy) {
       // Use proxy server - no authentication needed (proxy handles it)
-      url = `${KHOROS_API_CONFIG.proxyUrl}?fromDate=${fromDate}&toDate=${toDate}`
+      // Ensure proxy URL is a full URL (not relative) to avoid local network access requests
+      let proxyUrl = KHOROS_API_CONFIG.proxyUrl
+      
+      // If proxy URL is relative or contains localhost, warn in production
+      if (typeof window !== 'undefined' && window.location.origin.includes('vercel.app')) {
+        // We're in production on Vercel
+        if (proxyUrl.includes('localhost') || proxyUrl.startsWith('/')) {
+          console.error('❌ ERROR: Proxy URL contains localhost in production! This will trigger local network permission requests.')
+          console.error('   Current proxy URL:', proxyUrl)
+          console.error('   Please set VITE_KHOROS_PROXY_URL to your Vercel API endpoint: https://cmdr-analytics.vercel.app/api/khoros/posts')
+          throw new Error('Proxy URL is configured for localhost. In production, use your Vercel API endpoint instead.')
+        }
+      }
+      
+      url = `${proxyUrl}?fromDate=${fromDate}&toDate=${toDate}`
       headers = {
         'Accept': 'application/json',
       }

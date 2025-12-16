@@ -22,15 +22,19 @@ function Analytics() {
   const [topics, setTopics] = useState([])
 
   useEffect(() => {
-    loadData()
+    const loadDataAsync = async () => {
+      await loadData()
+    }
+    loadDataAsync()
   }, [])
 
   useEffect(() => {
     filterPosts()
   }, [searchTerm, selectedTopic, selectedCategory, posts])
 
-  const loadData = () => {
-    const loadedPosts = loadPosts()
+  const loadData = async () => {
+    const loadedPosts = await loadPosts()
+    console.log('📊 Analytics: Loaded posts:', loadedPosts.length)
     setPosts(loadedPosts)
     setFilteredPosts(loadedPosts)
     

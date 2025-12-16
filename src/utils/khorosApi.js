@@ -306,8 +306,8 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
       proxyUrl = `${proxyBase.replace(/\/+$/, '')}/posts`
     }
     
-    url = `${proxyUrl}?fromDate=${fromDate}&toDate=${toDate}`
-    headers = {
+    const url = `${proxyUrl}?fromDate=${fromDate}&toDate=${toDate}`
+    const headers = {
       'Accept': 'application/json',
     }
     console.log('🔄 Using Vercel serverless function to bypass CORS')

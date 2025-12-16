@@ -136,14 +136,25 @@ const stripHtml = (html) => {
 }
 
 const getProxyBaseUrl = () => {
-  // If proxy URL is explicitly configured, use it
+  // If proxy URL is explicitly configured, use it (but reject localhost in production)
   if (KHOROS_API_CONFIG.proxyUrl && KHOROS_API_CONFIG.proxyUrl.trim() !== '') {
     try {
       const proxyUrl = KHOROS_API_CONFIG.proxyUrl.split('?')[0]
       
+      // Check if we're in production (not localhost)
+      const isProduction = import.meta.env.PROD || (typeof window !== 'undefined' && !window.location.origin.includes('localhost'))
+      
+      // Reject localhost URLs in production - they cause CORS errors
+      if (isProduction && (proxyUrl.includes('localhost') || proxyUrl.includes('127.0.0.1'))) {
+        console.warn('⚠️ Ignoring localhost proxy URL in production. Using Vercel serverless function instead.')
+        console.warn('   To fix: Remove VITE_KHOROS_PROXY_URL from Vercel environment variables, or set it to your Vercel URL.')
+        return null // Fall back to default
+      }
+      
       // If proxyUrl is already a full URL (starts with http:// or https://), use it directly
       if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
         const url = new URL(proxyUrl)
+        
         let pathname = url.pathname.replace(/\/+$/, '')
         if (pathname.endsWith('/posts')) {
           pathname = pathname.slice(0, -('/posts'.length))

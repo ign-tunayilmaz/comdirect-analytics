@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import App from './App.jsx'
 import './index.css'
 import { clearPosts } from './utils/dataCollector'
@@ -110,9 +111,26 @@ if (typeof window !== 'undefined') {
   console.log('💡 Tip: Run testKhorosAPI() in the console to test API connectivity')
 }
 
+// Get Google OAuth Client ID from environment variable
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+
+// Only wrap with GoogleOAuthProvider if client ID is provided
+const AppWrapper = ({ children }) => {
+  if (GOOGLE_CLIENT_ID) {
+    return (
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        {children}
+      </GoogleOAuthProvider>
+    )
+  }
+  return children
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <AppWrapper>
+      <App />
+    </AppWrapper>
   </React.StrictMode>,
 )
 

@@ -56,8 +56,17 @@ module.exports = async (req, res) => {
   };
 
   if (!KHOROS_CONFIG.clientId || !KHOROS_CONFIG.accessToken) {
+    console.error('Missing Khoros credentials:', {
+      hasClientId: !!KHOROS_CONFIG.clientId,
+      hasAccessToken: !!KHOROS_CONFIG.accessToken,
+      communityId: KHOROS_CONFIG.communityId
+    });
     return res.status(500).json({ 
-      error: 'Khoros API credentials not configured. Please set KHOROS_CLIENT_ID and KHOROS_ACCESS_TOKEN environment variables.' 
+      error: {
+        code: '500',
+        message: 'Khoros API credentials not configured',
+        details: 'Please set KHOROS_CLIENT_ID and KHOROS_ACCESS_TOKEN environment variables in Vercel.'
+      }
     });
   }
 
@@ -79,46 +88,83 @@ module.exports = async (req, res) => {
     });
 
     if (response.status !== 200) {
-      return res.status(response.status).json({
-        error: `Khoros API error: ${response.status} ${response.statusText}`,
-        details: response.data
+      console.error('Khoros API returned non-200 status:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: typeof response.data === 'string' ? response.data.substring(0, 500) : response.data
+      });
+      return res.status(500).json({
+        error: {
+          code: '500',
+          message: `Khoros API error: ${response.status} ${response.statusText}`,
+          details: typeof response.data === 'string' ? response.data.substring(0, 500) : response.data
+        }
       });
     }
 
     // Parse CSV data and convert to JSON
     const csvData = response.data;
+    
+    if (!csvData || typeof csvData !== 'string') {
+      console.error('Invalid CSV data received:', typeof csvData);
+      return res.status(500).json({
+        error: {
+          code: '500',
+          message: 'Invalid response from Khoros API',
+          details: 'Expected CSV data but received invalid format'
+        }
+      });
+    }
+    
     const lines = csvData.split('\n').filter(line => line.trim());
+    
+    if (lines.length === 0) {
+      console.warn('No data lines in CSV response');
+      return res.json({ records: [] });
+    }
+    
     const dataLines = lines.slice(1); // Skip header
 
     const records = dataLines.map((line) => {
-      const fields = parseCSVLine(line);
-      
-      return {
-        rawLine: line.substring(0, 200),
-        timestamp: fields[4] || '',
-        city: fields[5] || '',
-        country: fields[7] || '',
-        topicId: fields[20] || '',
-        topicTitle: fields[21] || '',
-        boardId: fields[22] || '',
-        boardTitle: fields[23] || '',
-        username: fields[26] || '',
-        userId: fields[25] || '',
-        eventType: fields[1] || '',
-        messageId: fields[44] || '',
-        messageSubject: fields[45] || '',
-        messageIsTopic: fields[46] || '',
-        messageType: fields[47] || '',
-        allFields: fields.length
-      };
-    });
+      try {
+        const fields = parseCSVLine(line);
+        
+        return {
+          rawLine: line.substring(0, 200),
+          timestamp: fields[4] || '',
+          city: fields[5] || '',
+          country: fields[7] || '',
+          topicId: fields[20] || '',
+          topicTitle: fields[21] || '',
+          boardId: fields[22] || '',
+          boardTitle: fields[23] || '',
+          username: fields[26] || '',
+          userId: fields[25] || '',
+          eventType: fields[1] || '',
+          messageId: fields[44] || '',
+          messageSubject: fields[45] || '',
+          messageIsTopic: fields[46] || '',
+          messageType: fields[47] || '',
+          allFields: fields.length
+        };
+      } catch (parseError) {
+        console.warn('Error parsing CSV line:', parseError.message, line.substring(0, 100));
+        return null;
+      }
+    }).filter(record => record !== null);
 
+    console.log(`Successfully parsed ${records.length} records from Khoros API`);
     return res.json({ records });
   } catch (error) {
     console.error('Proxy Server Error:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({ 
-      error: 'Proxy server error', 
-      message: error.message 
+      error: {
+        code: '500',
+        message: 'A server error has occurred',
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      }
     });
   }
 };

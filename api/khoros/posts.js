@@ -176,15 +176,27 @@ export default async (req, res) => {
     console.log(`Successfully parsed ${records.length} records from Khoros API`);
     return res.json({ records });
   } catch (error) {
-    console.error('Proxy Server Error:', error);
-    console.error('Error stack:', error.stack);
+    console.error('❌ Proxy Server Error:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    
+    // Include the actual error message in the response
+    const errorMessage = error.message || 'A server error has occurred';
+    const errorDetails = {
+      code: '500',
+      message: errorMessage,
+      details: error.message,
+      type: error.name || 'Error'
+    };
+    
+    // In development or if error is not sensitive, include stack
+    if (process.env.NODE_ENV === 'development' || error.name === 'TypeError' || error.name === 'ReferenceError') {
+      errorDetails.stack = error.stack;
+    }
+    
     return res.status(500).json({ 
-      error: {
-        code: '500',
-        message: 'A server error has occurred',
-        details: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      }
+      error: errorDetails
     });
   }
 };

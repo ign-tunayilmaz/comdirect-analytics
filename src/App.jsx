@@ -7,7 +7,7 @@ import CSVMetrics from './components/CSVMetrics'
 import Login from './components/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 import { isAuthenticated, logout, getCurrentUser, getCurrentUserName, getCurrentUserPicture } from './utils/auth'
-import { BarChart3, Database, TrendingUp, FileSpreadsheet, Menu, X, LogOut, User } from 'lucide-react'
+import { BarChart3, Database, TrendingUp, FileSpreadsheet, Menu, X, LogOut, User, Moon, Sun } from 'lucide-react'
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -15,6 +15,14 @@ function App() {
   const [userEmail, setUserEmail] = useState(null)
   const [userName, setUserName] = useState(null)
   const [userPicture, setUserPicture] = useState(null)
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage first, then system preference
+    const stored = localStorage.getItem('theme')
+    if (stored) {
+      return stored === 'dark'
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   
   // Use base path for GitHub Pages, empty for local dev
   const basename = import.meta.env.BASE_URL
@@ -23,6 +31,21 @@ function App() {
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Apply dark mode class to document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    }
+  }, [isDarkMode])
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode)
+  }
 
   const checkAuth = () => {
     const isAuth = isAuthenticated()
@@ -117,6 +140,16 @@ function App() {
           
           {isSidebarOpen && (
             <div className="p-4 border-t border-gray-700 space-y-3">
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={toggleDarkMode}
+                className="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-700 transition-colors text-gray-300"
+                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+                <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+              </button>
+              
               {/* User Info */}
               <div className="flex items-center space-x-2 text-sm">
                 {userPicture ? (
@@ -147,14 +180,21 @@ function App() {
               
               <div className="pt-2 border-t border-gray-700">
                 <p className="text-xs text-gray-400">Community Insights Tool</p>
-                <p className="text-xs text-gray-500 mt-1">v1.0.9</p>
+                <p className="text-xs text-gray-500 mt-1">v1.0.10</p>
               </div>
             </div>
           )}
 
-          {/* Collapsed sidebar logout */}
+          {/* Collapsed sidebar controls */}
           {!isSidebarOpen && (
-            <div className="p-4 border-t border-gray-700">
+            <div className="p-4 border-t border-gray-700 space-y-2">
+              <button
+                onClick={toggleDarkMode}
+                className="w-full p-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center"
+                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full p-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center"

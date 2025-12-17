@@ -235,74 +235,6 @@ const fetchMessageDetails = async (messageIds = []) => {
   }
 }
 
-/**
- * Fetch engagement metrics (likes, replies, views) for messages
- * Uses the Khoros Community API (LIQL) via Vercel serverless function
- */
-const fetchEngagementMetrics = async (messageIds = []) => {
-  if (!Array.isArray(messageIds) || messageIds.length === 0) {
-    console.warn('⚠️ fetchEngagementMetrics: No message IDs provided')
-    return {}
-  }
-  
-  const endpoint = getProxyEndpoint('/engagement')
-  if (!endpoint) {
-    console.warn('⚠️ No proxy endpoint configured for engagement metrics.')
-    return {}
-  }
-
-  try {
-    const uniqueIds = Array.from(new Set(messageIds.filter(Boolean)))
-    if (uniqueIds.length === 0) {
-      console.warn('⚠️ fetchEngagementMetrics: No valid message IDs after filtering')
-      return {}
-    }
-
-    console.log(`📊 Fetching engagement metrics for ${uniqueIds.length} messages from ${endpoint}...`)
-    console.log(`📊 Sample IDs being sent:`, uniqueIds.slice(0, 5))
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ messageIds: uniqueIds })
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`❌ Engagement fetch error: ${response.status} ${response.statusText}`)
-      console.error(`❌ Error response:`, errorText)
-      return {} // Return empty object on error - don't fail the entire request
-    }
-
-    const data = await response.json()
-    console.log(`📊 Engagement API response:`, {
-      totalFetched: data?.totalFetched,
-      totalRequested: data?.totalRequested,
-      engagementKeys: data?.engagement ? Object.keys(data.engagement).length : 0
-    })
-    
-    const engagementMap = data?.engagement || {}
-    
-    if (Object.keys(engagementMap).length > 0) {
-      console.log(`✅ Fetched engagement for ${Object.keys(engagementMap).length} messages`)
-      console.log(`📊 Sample engagement data:`, Object.entries(engagementMap).slice(0, 3))
-    } else {
-      console.warn(`⚠️ Engagement API returned empty map. Total fetched: ${data?.totalFetched || 0}, Total requested: ${data?.totalRequested || 0}`)
-    }
-    
-    return engagementMap
-  } catch (error) {
-    console.error('❌ Failed to fetch engagement metrics:', error)
-    console.error('   Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    })
-    return {} // Return empty object on error - don't fail the entire request
-  }
-}
 
 /**
  * Check if API is properly configured
@@ -468,104 +400,6 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     console.log(`📊 After transformation: ${posts.length} posts`)
 
     posts = await hydratePostsWithContent(posts)
-    
-    // Fetch engagement metrics for all posts
-    // The LIQL API expects message IDs, not topic IDs
-    // Try messageId first (field 44), then topicId (field 20) as fallback
-    // Collect all possible IDs to try
-    const messageIds = posts
-      .map(post => {
-        // Prioritize messageId (actual message ID) over topicId (conversation ID)
-        // The LIQL API queries messages, so we need message IDs
-        const id = post.messageId || post.topicId || post.id
-        if (!id) return null
-        // Convert to string and ensure it's not empty
-        const idStr = String(id).trim()
-        return idStr && idStr !== 'null' && idStr !== 'undefined' && idStr !== '' ? idStr : null
-      })
-      .filter(id => id !== null)
-    
-    // Also collect topicIds separately in case we need to query by topic
-    const topicIds = posts
-      .map(post => {
-        const id = post.topicId
-        if (!id) return null
-        const idStr = String(id).trim()
-        return idStr && idStr !== 'null' && idStr !== 'undefined' && idStr !== '' ? idStr : null
-      })
-      .filter(id => id !== null && !messageIds.includes(id)) // Don't duplicate
-    
-    console.log(`📊 Extracted ${messageIds.length} message IDs and ${topicIds.length} topic IDs for engagement lookup (out of ${posts.length} posts)`)
-    if (messageIds.length > 0) {
-      console.log(`📊 Sample message IDs:`, messageIds.slice(0, 5))
-    }
-    if (topicIds.length > 0 && messageIds.length === 0) {
-      console.log(`📊 Sample topic IDs (fallback):`, topicIds.slice(0, 5))
-    }
-    if (messageIds.length === 0 && topicIds.length === 0) {
-      console.warn('⚠️ No valid IDs found. Sample post structure:', posts[0] ? {
-        topicId: posts[0].topicId,
-        messageId: posts[0].messageId,
-        id: posts[0].id
-      } : 'No posts')
-    }
-    
-    // Try message IDs first, then topic IDs if no message IDs available
-    const idsToQuery = messageIds.length > 0 ? messageIds : topicIds
-    
-    if (idsToQuery.length > 0) {
-      console.log(`📊 Querying engagement for ${idsToQuery.length} IDs (${messageIds.length > 0 ? 'message' : 'topic'} IDs)`)
-      const engagementMap = await fetchEngagementMetrics(idsToQuery)
-      
-      console.log(`📊 Engagement map received with ${Object.keys(engagementMap).length} entries`)
-      if (Object.keys(engagementMap).length > 0) {
-        console.log(`📊 Sample engagement map keys:`, Object.keys(engagementMap).slice(0, 5))
-        console.log(`📊 Sample engagement data:`, Object.entries(engagementMap).slice(0, 3))
-      }
-      
-      // Merge engagement data into posts
-      let matchedCount = 0
-      let unmatchedSample = []
-      posts = posts.map(post => {
-        // Try all possible ID fields and normalize to string for matching
-        const topicId = String(post.topicId || '').trim()
-        const messageId = String(post.messageId || '').trim()
-        const postId = String(post.id || '').trim()
-        
-        // Try matching with all possible IDs
-        let engagement = engagementMap[topicId] || engagementMap[messageId] || engagementMap[postId] || {}
-        
-        if (engagement.likes !== undefined || engagement.replies !== undefined) {
-          matchedCount++
-          if (matchedCount <= 3) {
-            console.log(`✅ Found engagement for post (topicId: ${topicId}, messageId: ${messageId}, id: ${postId}):`, engagement)
-          }
-        } else if (unmatchedSample.length < 3 && (topicId || messageId || postId)) {
-          unmatchedSample.push({
-            topicId,
-            messageId,
-            id: postId,
-            availableKeys: Object.keys(engagementMap).slice(0, 5)
-          })
-        }
-        
-        return {
-          ...post,
-          likes: engagement.likes ?? post.likes ?? 0,
-          replies: engagement.replies ?? post.replies ?? 0,
-          views: engagement.views ?? post.views ?? 0
-        }
-      })
-      
-      console.log(`✅ Merged engagement metrics: ${matchedCount} posts matched out of ${posts.length} total`)
-      if (matchedCount === 0 && unmatchedSample.length > 0) {
-        console.warn(`⚠️ No engagement matches found. Sample post IDs:`, unmatchedSample)
-        console.warn(`   This suggests the IDs from CSV don't match the IDs returned by LIQL API`)
-        console.warn(`   Engagement map has ${Object.keys(engagementMap).length} entries`)
-      }
-    } else {
-      console.warn('⚠️ No valid message IDs found for engagement lookup')
-    }
     
     console.log(`✅ Successfully fetched ${posts.length} posts from Khoros API`)
     
@@ -790,8 +624,22 @@ const transformKhorosData = (khorosResponse, options = {}) => {
       
       // Extract ID from CSV - preserve both topicId and messageId for engagement lookup
       // topicId is field 20, messageId is field 44 from CSV
-      const topicId = msg.topicId || ''
-      const messageId = msg.messageId || ''
+      // NOTE: LSI Data Export API may not include these fields - they're often empty
+      let topicId = String(msg.topicId || '').trim()
+      let messageId = String(msg.messageId || '').trim()
+      
+      // If IDs are empty, try to extract from URL if available
+      // Khoros URLs have format: /t5/board/topic/m-p/MESSAGE_ID or /t5/board/topic/td-p/TOPIC_ID
+      if ((!messageId || messageId === '') && msg.url) {
+        const urlMatch = msg.url.match(/\/m-p\/(\d+)/) || msg.url.match(/\/td-p\/(\d+)/)
+        if (urlMatch && urlMatch[1]) {
+          if (msg.url.includes('/m-p/')) {
+            messageId = urlMatch[1]
+          } else if (msg.url.includes('/td-p/')) {
+            topicId = urlMatch[1]
+          }
+        }
+      }
       
       // Use messageId if available, otherwise topicId, otherwise generate one
       const postId = messageId || topicId || msg.id || 
@@ -828,9 +676,6 @@ const transformKhorosData = (khorosResponse, options = {}) => {
         sentiment: analyzeSentimentFromText(body || '', title || ''),
         requestType: categorizePostType(body, title),
         isPlatformRelated: checkIfPlatformRelated(msg.boardId || msg.board?.id, title, body),
-        likes: likes,
-        replies: replies,
-        views: views,
         date: createdAt,
         url: postUrl,
         tags: msg.tags || [],

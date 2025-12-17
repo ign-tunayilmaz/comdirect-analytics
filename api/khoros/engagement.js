@@ -34,10 +34,27 @@ const chunkArray = (arr, size) => {
 const fetchEngagementBatch = async (ids = []) => {
   if (ids.length === 0) return [];
   
-  const quotedIds = ids.map(id => `'${id}'`).join(',');
+  // Try numeric IDs first (LIQL might expect numbers, not strings)
+  // Filter out empty strings and convert to numbers where possible
+  const numericIds = ids
+    .map(id => {
+      const num = Number(id);
+      return !isNaN(num) && num > 0 ? num : null;
+    })
+    .filter(id => id !== null);
+  
+  // If we have numeric IDs, use them; otherwise use string IDs
+  const idsToUse = numericIds.length > 0 ? numericIds : ids;
+  const quotedIds = idsToUse.map(id => typeof id === 'number' ? id : `'${id}'`).join(',');
+  
   // LIQL query to get engagement metrics: kudos (likes), replies count, and view count
+  // Try querying by numeric ID first
   const liql = `SELECT id, kudos.sum(weight) as kudos_weight, replies.count(*) as replies_count, view_count FROM messages WHERE id IN (${quotedIds})`;
   const url = `${LIQL_ENDPOINT}?q=${encodeURIComponent(liql)}&restapi.format=json`;
+
+  console.log(`🔍 LIQL Query: ${liql}`);
+  console.log(`🔍 Querying ${idsToUse.length} IDs (${numericIds.length > 0 ? 'numeric' : 'string'} format)`);
+  console.log(`🔍 Sample IDs:`, idsToUse.slice(0, 5));
 
   try {
     const response = await axios.get(url, {
@@ -60,13 +77,21 @@ const fetchEngagementBatch = async (ids = []) => {
     if (items.length === 0 && ids.length > 0) {
       console.warn(`⚠️ No engagement data returned for ${ids.length} message IDs`);
       console.warn(`   Sample IDs sent:`, ids.slice(0, 5));
+      console.warn(`   Numeric IDs used:`, idsToUse.slice(0, 5));
       console.warn(`   Response structure:`, {
         hasData: !!response.data,
         hasDataData: !!response.data?.data,
         hasItems: !!response.data?.data?.items,
         responseKeys: response.data ? Object.keys(response.data) : 'no data',
-        fullResponse: JSON.stringify(response.data).substring(0, 500)
+        fullResponse: JSON.stringify(response.data).substring(0, 1000)
       });
+      
+      // If we used string IDs and got no results, the IDs might be wrong format
+      // The CSV might have topic/conversation IDs, not message IDs
+      if (numericIds.length === 0) {
+        console.warn(`   ⚠️ All IDs were non-numeric. The CSV might contain topic/conversation IDs, not message IDs.`);
+        console.warn(`   ⚠️ LIQL API requires actual message IDs from the community, not topic IDs.`);
+      }
     }
     
     return items;

@@ -147,7 +147,7 @@ function App() {
               
               <div className="pt-2 border-t border-gray-700">
                 <p className="text-xs text-gray-400">Community Insights Tool</p>
-                <p className="text-xs text-gray-500 mt-1">v1.0.7</p>
+                <p className="text-xs text-gray-500 mt-1">v1.0.8</p>
               </div>
             </div>
           )}

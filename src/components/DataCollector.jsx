@@ -546,7 +546,6 @@ function DataCollector() {
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Content</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Category</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Type</th>
-                  <th className="text-left p-3 text-gray-700 dark:text-gray-300">Engagement</th>
                   <th className="text-left p-3 text-gray-700 dark:text-gray-300">Link</th>
                 </tr>
               </thead>
@@ -610,9 +609,6 @@ function DataCollector() {
                         <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                           {post.requestType.replace(/_/g, ' ')}
                         </span>
-                      </td>
-                      <td className="p-3 text-gray-600 dark:text-gray-400">
-                        {post.likes} likes, {post.replies} replies
                       </td>
                       <td className="p-3">
                         {post.url ? (

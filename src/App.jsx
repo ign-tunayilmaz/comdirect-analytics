@@ -3,10 +3,11 @@ import { HashRouter as Router, Routes, Route, Link, Navigate } from 'react-route
 import Dashboard from './components/Dashboard'
 import DataCollector from './components/DataCollector'
 import Analytics from './components/Analytics'
+import CSVMetrics from './components/CSVMetrics'
 import Login from './components/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 import { isAuthenticated, logout, getCurrentUser, getCurrentUserName, getCurrentUserPicture } from './utils/auth'
-import { BarChart3, Database, TrendingUp, Menu, X, LogOut, User } from 'lucide-react'
+import { BarChart3, Database, TrendingUp, FileSpreadsheet, Menu, X, LogOut, User } from 'lucide-react'
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -105,6 +106,13 @@ function App() {
               <TrendingUp size={24} />
               {isSidebarOpen && <span>Analytics</span>}
             </Link>
+            <Link 
+              to="/csv-metrics" 
+              className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <FileSpreadsheet size={24} />
+              {isSidebarOpen && <span>CSV Metrics</span>}
+            </Link>
           </nav>
           
           {isSidebarOpen && (
@@ -139,7 +147,7 @@ function App() {
               
               <div className="pt-2 border-t border-gray-700">
                 <p className="text-xs text-gray-400">Community Insights Tool</p>
-                <p className="text-xs text-gray-500 mt-1">v1.0.3</p>
+                <p className="text-xs text-gray-500 mt-1">v1.0.5</p>
               </div>
             </div>
           )}
@@ -182,6 +190,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Analytics />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/csv-metrics" 
+              element={
+                <ProtectedRoute>
+                  <CSVMetrics />
                 </ProtectedRoute>
               } 
             />

@@ -1,6 +1,6 @@
 {
   "name": "comdirect-community-analytics",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "User analytics tool for comdirect community posts",
   "type": "module",
   "scripts": {

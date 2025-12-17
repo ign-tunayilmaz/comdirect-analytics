@@ -138,24 +138,32 @@ export default function CSVMetrics() {
   const thumbnailChartsRef = useRef([])
 
   useEffect(() => {
-    if (parsedRows.length > 0 && activeDateKeys.size > 0 && activeMetricIds.size > 0) {
-      try {
-        if (currentChartType === 'bar' || currentChartType === 'line') {
+    const hasData = parsedRows.length > 0 && activeDateKeys.size > 0 && activeMetricIds.size > 0
+    
+    try {
+      if (currentChartType === 'bar' || currentChartType === 'line') {
+        if (hasData) {
           // Destroy existing chart if type changed
           if (chartInstanceRef.current && chartInstanceRef.current.config.type !== currentChartType) {
             chartInstanceRef.current.destroy()
             chartInstanceRef.current = null
           }
           createOrUpdateChart()
-        } else if (currentChartType === 'table') {
-          // Table is rendered in JSX
-        } else if (currentChartType === 'thumbnails') {
-          // Thumbnails are rendered in JSX with refs
+        } else {
+          // Destroy chart when no data
+          if (chartInstanceRef.current) {
+            chartInstanceRef.current.destroy()
+            chartInstanceRef.current = null
+          }
         }
-      } catch (error) {
-        console.error('Error updating chart:', error)
-        setStatus({ message: `Chart error: ${error.message}`, isError: true })
+      } else if (currentChartType === 'table') {
+        // Table is rendered in JSX
+      } else if (currentChartType === 'thumbnails') {
+        // Thumbnails are rendered in JSX with refs
       }
+    } catch (error) {
+      console.error('Error updating chart:', error)
+      setStatus({ message: `Chart error: ${error.message}`, isError: true })
     }
   }, [parsedRows, activeDateKeys, activeMetricIds, currentChartType])
 
@@ -778,7 +786,7 @@ export default function CSVMetrics() {
                   </div>
                 )}
 
-                {(currentChartType === 'bar' || currentChartType === 'line') && (
+                {(currentChartType === 'bar' || currentChartType === 'line') && hasData && (
                   <div className="h-[400px]">
                     <canvas ref={chartRef} />
                   </div>
@@ -789,7 +797,9 @@ export default function CSVMetrics() {
                     <div>
                       <strong className="text-gray-900 dark:text-white block mb-2">No data yet.</strong>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Upload a CSV file and ensure at least one metric and one time period are enabled.
+                        {parsedRows.length === 0 
+                          ? 'Upload a CSV file to get started.'
+                          : 'Select at least one metric and one time period to display data.'}
                       </p>
                     </div>
                   </div>

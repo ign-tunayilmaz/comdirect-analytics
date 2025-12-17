@@ -68,3 +68,4 @@ That's why you need both versions in the redirect URIs list.
 3. **Check for typos** - URLs are case-sensitive
 4. **Try incognito mode** - to rule out cache issues
 
+

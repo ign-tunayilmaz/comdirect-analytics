@@ -236,6 +236,50 @@ const fetchMessageDetails = async (messageIds = []) => {
 }
 
 /**
+ * Fetch engagement metrics (likes, replies, views) for messages
+ * Uses the Khoros Community API (LIQL) via Vercel serverless function
+ */
+const fetchEngagementMetrics = async (messageIds = []) => {
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return {}
+  
+  const endpoint = getProxyEndpoint('/engagement')
+  if (!endpoint) {
+    console.warn('No proxy endpoint configured for engagement metrics.')
+    return {}
+  }
+
+  try {
+    const uniqueIds = Array.from(new Set(messageIds.filter(Boolean)))
+    if (uniqueIds.length === 0) return {}
+
+    console.log(`📊 Fetching engagement metrics for ${uniqueIds.length} messages...`)
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messageIds: uniqueIds })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.warn(`⚠️ Engagement fetch error: ${response.status} ${errorText}`)
+      return {} // Return empty object on error - don't fail the entire request
+    }
+
+    const data = await response.json()
+    const engagementMap = data?.engagement || {}
+    
+    console.log(`✅ Fetched engagement for ${data?.totalFetched || 0} messages`)
+    return engagementMap
+  } catch (error) {
+    console.warn('⚠️ Failed to fetch engagement metrics (non-critical):', error.message)
+    return {} // Return empty object on error - don't fail the entire request
+  }
+}
+
+/**
  * Check if API is properly configured
  * Returns true if either:
  * 1. Proxy is available (Vercel serverless function or explicit proxy URL), OR
@@ -399,6 +443,30 @@ export const fetchPostsFromKhorosAPI = async (options = {}) => {
     console.log(`📊 After transformation: ${posts.length} posts`)
 
     posts = await hydratePostsWithContent(posts)
+    
+    // Fetch engagement metrics for all posts
+    const messageIds = posts
+      .map(post => post.messageId || post.id || post.topicId)
+      .filter(id => id && String(id).trim() !== '')
+    
+    if (messageIds.length > 0) {
+      const engagementMap = await fetchEngagementMetrics(messageIds)
+      
+      // Merge engagement data into posts
+      posts = posts.map(post => {
+        const postId = post.messageId || post.id || post.topicId
+        const engagement = engagementMap[postId] || {}
+        
+        return {
+          ...post,
+          likes: engagement.likes ?? post.likes ?? 0,
+          replies: engagement.replies ?? post.replies ?? 0,
+          views: engagement.views ?? post.views ?? 0
+        }
+      })
+      
+      console.log(`✅ Merged engagement metrics for ${Object.keys(engagementMap).length} posts`)
+    }
     
     console.log(`✅ Successfully fetched ${posts.length} posts from Khoros API`)
     

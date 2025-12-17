@@ -52,3 +52,4 @@ Without JavaScript origins, Google rejects the OAuth request.
 
 Check the browser console (F12) when you click "Sign in with Google". The error message will show the exact redirect URI Google is expecting. Make sure that exact URI is in your Authorized redirect URIs list.
 
+

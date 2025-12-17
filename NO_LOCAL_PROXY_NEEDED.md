@@ -64,3 +64,4 @@ When running locally (`npm run dev`):
 - Remove `VITE_KHOROS_PROXY_URL` from Vercel environment variables (or set it to your Vercel URL)
 - The app will automatically use the serverless function if no proxy URL is configured
 
+

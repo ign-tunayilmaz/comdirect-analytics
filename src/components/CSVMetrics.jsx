@@ -523,8 +523,17 @@ export default function CSVMetrics() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Sidebar */}
           <aside className="lg:col-span-1 space-y-4">
+            {/* Message for Thumbnails view */}
+            {parsedRows.length > 0 && currentChartType === 'thumbnails' && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Selectors unavailable in Thumbnails view
+                </p>
+              </div>
+            )}
+
             {/* Metrics Section */}
-            {parsedRows.length > 0 && (
+            {parsedRows.length > 0 && currentChartType !== 'thumbnails' && (
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                 <div 
                   className="flex items-center justify-between mb-3 cursor-pointer"
@@ -585,7 +594,7 @@ export default function CSVMetrics() {
             )}
 
             {/* Time Periods Section */}
-            {parsedRows.length > 0 && (
+            {parsedRows.length > 0 && currentChartType !== 'thumbnails' && (
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                 <div 
                   className="flex items-center justify-between mb-3 cursor-pointer"
@@ -648,6 +657,14 @@ export default function CSVMetrics() {
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Controls will appear once a CSV is uploaded.
+                </p>
+              </div>
+            )}
+            
+            {parsedRows.length > 0 && currentChartType === 'thumbnails' && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  All metrics are displayed in Thumbnails view.
                 </p>
               </div>
             )}

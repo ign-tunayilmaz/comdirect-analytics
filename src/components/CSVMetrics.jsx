@@ -1,14 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Chart, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend } from 'chart.js'
+import { 
+  Chart, 
+  CategoryScale, 
+  LinearScale, 
+  BarElement, 
+  BarController,
+  LineElement, 
+  LineController,
+  PointElement, 
+  Title, 
+  Tooltip, 
+  Legend 
+} from 'chart.js'
 import Papa from 'papaparse'
 import { Upload, Download, BarChart3, TrendingUp, Table, Grid } from 'lucide-react'
 
-// Register Chart.js components
+// Register Chart.js components (controllers are required for chart types)
 Chart.register(
   CategoryScale,
   LinearScale,
   BarElement,
+  BarController,
   LineElement,
+  LineController,
   PointElement,
   Title,
   Tooltip,
@@ -125,17 +139,22 @@ export default function CSVMetrics() {
 
   useEffect(() => {
     if (parsedRows.length > 0 && activeDateKeys.size > 0 && activeMetricIds.size > 0) {
-      if (currentChartType === 'bar' || currentChartType === 'line') {
-        // Destroy existing chart if type changed
-        if (chartInstanceRef.current && chartInstanceRef.current.config.type !== currentChartType) {
-          chartInstanceRef.current.destroy()
-          chartInstanceRef.current = null
+      try {
+        if (currentChartType === 'bar' || currentChartType === 'line') {
+          // Destroy existing chart if type changed
+          if (chartInstanceRef.current && chartInstanceRef.current.config.type !== currentChartType) {
+            chartInstanceRef.current.destroy()
+            chartInstanceRef.current = null
+          }
+          createOrUpdateChart()
+        } else if (currentChartType === 'table') {
+          // Table is rendered in JSX
+        } else if (currentChartType === 'thumbnails') {
+          // Thumbnails are rendered in JSX with refs
         }
-        createOrUpdateChart()
-      } else if (currentChartType === 'table') {
-        // Table is rendered in JSX
-      } else if (currentChartType === 'thumbnails') {
-        // Thumbnails are rendered in JSX with refs
+      } catch (error) {
+        console.error('Error updating chart:', error)
+        setStatus({ message: `Chart error: ${error.message}`, isError: true })
       }
     }
   }, [parsedRows, activeDateKeys, activeMetricIds, currentChartType])
@@ -143,10 +162,18 @@ export default function CSVMetrics() {
   // Cleanup charts on unmount
   useEffect(() => {
     return () => {
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.destroy()
+      try {
+        if (chartInstanceRef.current) {
+          chartInstanceRef.current.destroy()
+        }
+        thumbnailChartsRef.current.forEach((chart) => {
+          if (chart && typeof chart.destroy === 'function') {
+            chart.destroy()
+          }
+        })
+      } catch (error) {
+        console.error('Error cleaning up charts:', error)
       }
-      thumbnailChartsRef.current.forEach((chart) => chart.destroy())
     }
   }, [])
 
@@ -249,100 +276,134 @@ export default function CSVMetrics() {
 
     try {
       const text = await file.text()
+      
       Papa.parse(text, {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: true,
         complete: (results) => {
-          const rows = results.data || []
-          const fields = (results.meta && results.meta.fields) || []
+          try {
+            const rows = results.data || []
+            const fields = (results.meta && results.meta.fields) || []
 
-          if (!rows.length) {
-            setStatus({ message: 'No rows found in CSV', isError: true })
+            if (!rows.length) {
+              setStatus({ message: 'No rows found in CSV', isError: true })
+              setParsedRows([])
+              setActiveDateKeys(new Set())
+              setMetricsConfig([])
+              return
+            }
+
+            // Normalize and enrich rows
+            const normalizedRows = rows
+              .map((row) => {
+                try {
+                  let rawDate = row.Date ?? row.date ?? row.DATE ?? row.date_local ?? undefined
+                  if (!rawDate && fields && fields.length) {
+                    const dateField = fields.find((f) => /date/i.test(String(f).trim()))
+                    if (dateField && dateField in row) {
+                      rawDate = row[dateField]
+                    }
+                  }
+                  const normalized = normalizeDateString(rawDate)
+                  if (!normalized) return null
+                  return {
+                    ...row,
+                    DateKey: normalized,
+                    DateDisplay: normalized,
+                  }
+                } catch (rowError) {
+                  console.warn('Error processing row:', rowError, row)
+                  return null
+                }
+              })
+              .filter(Boolean)
+
+            if (!normalizedRows.length) {
+              setStatus({ message: 'No valid Date values found in CSV. Please ensure your CSV has a date column.', isError: true })
+              setActiveDateKeys(new Set())
+              setMetricsConfig([])
+              return
+            }
+
+            // Build metrics config
+            const newMetricsConfig = []
+            if (fields && fields.length) {
+              const dateFieldNames = new Set(
+                fields.filter((f) => /date/i.test(String(f).trim()))
+              )
+              const numericSample = normalizedRows[0] || {}
+
+              fields.forEach((fieldName, index) => {
+                try {
+                  if (!fieldName) return
+                  if (dateFieldNames.has(fieldName)) return
+
+                  const sampleValue = numericSample[fieldName]
+                  const isNumericSample =
+                    typeof sampleValue === "number" ||
+                    (typeof sampleValue === "string" &&
+                      sampleValue.trim() !== "" &&
+                      !Number.isNaN(parseFloat(sampleValue.replace(/,/g, ""))))
+
+                  if (!isNumericSample) return
+
+                  const id = normalizeHeaderName(fieldName) || `metric_${index}`
+                  const color = METRIC_COLORS[newMetricsConfig.length % METRIC_COLORS.length]
+
+                  newMetricsConfig.push({
+                    id,
+                    label: String(fieldName).trim(),
+                    field: fieldName,
+                    color,
+                  })
+                } catch (fieldError) {
+                  console.warn('Error processing field:', fieldName, fieldError)
+                }
+              })
+            }
+
+            if (newMetricsConfig.length === 0) {
+              setStatus({ message: 'No numeric metrics found in CSV. Please ensure your CSV has numeric columns.', isError: true })
+              setParsedRows([])
+              setActiveDateKeys(new Set())
+              setMetricsConfig([])
+              return
+            }
+
+            // Initialize active sets
+            const newActiveDateKeys = new Set(normalizedRows.map((r) => r.DateKey))
+            const newActiveMetricIds = newMetricsConfig.length > 0 
+              ? new Set([newMetricsConfig[0].id])
+              : new Set()
+
+            setParsedRows(normalizedRows)
+            setMetricsConfig(newMetricsConfig)
+            setActiveDateKeys(newActiveDateKeys)
+            setActiveMetricIds(newActiveMetricIds)
+            setStatus({ message: `✅ Successfully loaded ${normalizedRows.length} rows with ${newMetricsConfig.length} metrics`, isError: false })
+          } catch (parseError) {
+            console.error('Error processing CSV data:', parseError)
+            setStatus({ message: `Error processing CSV: ${parseError.message}`, isError: true })
             setParsedRows([])
             setActiveDateKeys(new Set())
-            return
+            setMetricsConfig([])
           }
-
-          // Normalize and enrich rows
-          const normalizedRows = rows
-            .map((row) => {
-              let rawDate = row.Date ?? row.date ?? row.DATE ?? row.date_local ?? undefined
-              if (!rawDate && fields && fields.length) {
-                const dateField = fields.find((f) => /date/i.test(String(f).trim()))
-                if (dateField && dateField in row) {
-                  rawDate = row[dateField]
-                }
-              }
-              const normalized = normalizeDateString(rawDate)
-              if (!normalized) return null
-              return {
-                ...row,
-                DateKey: normalized,
-                DateDisplay: normalized,
-              }
-            })
-            .filter(Boolean)
-
-          if (!normalizedRows.length) {
-            setStatus({ message: 'No valid Date values found in CSV', isError: true })
-            setActiveDateKeys(new Set())
-            return
-          }
-
-          // Build metrics config
-          const newMetricsConfig = []
-          if (fields && fields.length) {
-            const dateFieldNames = new Set(
-              fields.filter((f) => /date/i.test(String(f).trim()))
-            )
-            const numericSample = normalizedRows[0] || {}
-
-            fields.forEach((fieldName, index) => {
-              if (!fieldName) return
-              if (dateFieldNames.has(fieldName)) return
-
-              const sampleValue = numericSample[fieldName]
-              const isNumericSample =
-                typeof sampleValue === "number" ||
-                (typeof sampleValue === "string" &&
-                  sampleValue.trim() !== "" &&
-                  !Number.isNaN(parseFloat(sampleValue.replace(/,/g, ""))))
-
-              if (!isNumericSample) return
-
-              const id = normalizeHeaderName(fieldName) || `metric_${index}`
-              const color = METRIC_COLORS[newMetricsConfig.length % METRIC_COLORS.length]
-
-              newMetricsConfig.push({
-                id,
-                label: String(fieldName).trim(),
-                field: fieldName,
-                color,
-              })
-            })
-          }
-
-          // Initialize active sets
-          const newActiveDateKeys = new Set(normalizedRows.map((r) => r.DateKey))
-          const newActiveMetricIds = newMetricsConfig.length > 0 
-            ? new Set([newMetricsConfig[0].id])
-            : new Set()
-
-          setParsedRows(normalizedRows)
-          setMetricsConfig(newMetricsConfig)
-          setActiveDateKeys(newActiveDateKeys)
-          setActiveMetricIds(newActiveMetricIds)
-          setStatus({ message: '', isError: false })
         },
         error: (err) => {
           console.error('CSV parse error:', err)
-          setStatus({ message: 'Failed to parse CSV file', isError: true })
+          setStatus({ message: `Failed to parse CSV file: ${err.message || 'Invalid CSV format'}`, isError: true })
+          setParsedRows([])
+          setActiveDateKeys(new Set())
+          setMetricsConfig([])
         },
       })
     } catch (err) {
       console.error('Error handling CSV file:', err)
-      setStatus({ message: 'Failed to read CSV file', isError: true })
+      setStatus({ message: `Failed to read CSV file: ${err.message || 'Unknown error'}`, isError: true })
+      setParsedRows([])
+      setActiveDateKeys(new Set())
+      setMetricsConfig([])
     }
   }
 

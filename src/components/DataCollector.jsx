@@ -35,7 +35,6 @@ function DataCollector() {
   const [filters, setFilters] = useState({
     requestType: '',
     platformRelated: '',
-    language: '',
     dateFrom: defaultDates.dateFrom,
     dateTo: defaultDates.dateTo
   })
@@ -74,10 +73,6 @@ function DataCollector() {
       filtered = filtered.filter(post => post.isPlatformRelated === true)
     } else if (filters.platformRelated === 'false') {
       filtered = filtered.filter(post => post.isPlatformRelated === false)
-    }
-
-    if (filters.language) {
-      filtered = filtered.filter(post => post.contentLanguage === filters.language)
     }
 
     if (filters.dateFrom) {
@@ -183,7 +178,6 @@ function DataCollector() {
             filters: {
               requestType: filters.requestType || undefined,
               platformRelated: filters.platformRelated === '' ? undefined : filters.platformRelated === 'true',
-              language: filters.language || undefined,
               dateFrom: range.dateFrom,
               dateTo: range.dateTo
             }
@@ -409,7 +403,7 @@ function DataCollector() {
       <div className="card mb-8">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Collection Settings</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Request Type Filter
@@ -441,21 +435,6 @@ function DataCollector() {
               <option value="">All Categories</option>
               <option value="true">Community Platform Only</option>
               <option value="false">General Topics Only</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Language Filter
-            </label>
-            <select
-              value={filters.language}
-              onChange={(e) => setFilters({ ...filters, language: e.target.value })}
-              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-            >
-              <option value="">All Languages</option>
-              <option value="de">🇩🇪 German (Deutsch)</option>
-              <option value="en">🇬🇧 English</option>
             </select>
           </div>
         </div>
@@ -543,11 +522,6 @@ function DataCollector() {
               </span>
             )}
           </h2>
-          {displayedPosts.length > 0 && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 italic">
-              💡 Click author/topic/content to expand full message
-            </p>
-          )}
         </div>
         
         {posts.length === 0 ? (

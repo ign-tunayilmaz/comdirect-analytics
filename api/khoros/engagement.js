@@ -128,16 +128,22 @@ export default async (req, res) => {
     }
 
     // Create a map of message ID to engagement data for easy lookup
+    // Normalize IDs to strings for consistent matching
     const engagementMap = {};
     allItems.forEach(item => {
       if (item.id) {
-        engagementMap[item.id] = {
+        // Normalize ID to string for consistent matching
+        const normalizedId = String(item.id).trim();
+        engagementMap[normalizedId] = {
           likes: item.kudos_weight || 0,
           replies: item.replies_count || 0,
           views: item.view_count || 0
         };
       }
     });
+    
+    console.log(`📊 Engagement map created with ${Object.keys(engagementMap).length} entries`);
+    console.log(`📊 Sample engagement data:`, Object.entries(engagementMap).slice(0, 3));
 
     console.log(`✅ Successfully fetched engagement for ${allItems.length} messages`);
     

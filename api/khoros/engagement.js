@@ -57,6 +57,18 @@ const fetchEngagementBatch = async (ids = []) => {
     const items = response.data?.data?.items || [];
     console.log(`✅ Fetched engagement for ${items.length} of ${ids.length} messages`);
     
+    if (items.length === 0 && ids.length > 0) {
+      console.warn(`⚠️ No engagement data returned for ${ids.length} message IDs`);
+      console.warn(`   Sample IDs sent:`, ids.slice(0, 5));
+      console.warn(`   Response structure:`, {
+        hasData: !!response.data,
+        hasDataData: !!response.data?.data,
+        hasItems: !!response.data?.data?.items,
+        responseKeys: response.data ? Object.keys(response.data) : 'no data',
+        fullResponse: JSON.stringify(response.data).substring(0, 500)
+      });
+    }
+    
     return items;
   } catch (error) {
     console.error('❌ Error fetching engagement batch:', error.message);
@@ -143,7 +155,14 @@ export default async (req, res) => {
     });
     
     console.log(`📊 Engagement map created with ${Object.keys(engagementMap).length} entries`);
-    console.log(`📊 Sample engagement data:`, Object.entries(engagementMap).slice(0, 3));
+    if (Object.keys(engagementMap).length > 0) {
+      console.log(`📊 Sample engagement data:`, Object.entries(engagementMap).slice(0, 3));
+    } else {
+      console.warn(`⚠️ Engagement map is empty! Total items fetched: ${allItems.length}, Total requested: ${messageIds.length}`);
+      if (allItems.length > 0) {
+        console.warn(`   Sample item structure:`, allItems[0]);
+      }
+    }
 
     console.log(`✅ Successfully fetched engagement for ${allItems.length} messages`);
     

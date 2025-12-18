@@ -12,6 +12,80 @@ import {
 
 const sentiment = new Sentiment()
 
+// Common German words that should be excluded from sentiment analysis
+// These are regular German words that might be misclassified as negative in English
+// Examples: "die" (the), "war" (was), "der" (the), etc.
+const GERMAN_COMMON_WORDS = new Set([
+  // Articles
+  'die', 'der', 'das', 'den', 'dem', 'des',
+  'ein', 'eine', 'einen', 'einem', 'eines',
+  
+  // Verb forms (sein - to be)
+  'ist', 'sind', 'bin', 'bist', 'seid',
+  'war', 'waren', 'wird', 'werden', 'wurde', 'wurden',
+  
+  // Verb forms (haben - to have)
+  'haben', 'hat', 'hatte', 'hatten', 'hast', 'habt',
+  
+  // Common verbs
+  'gibt', 'geben', 'gegeben',
+  'kommt', 'kommen', 'gekommen',
+  'geht', 'gehen', 'gegangen',
+  'macht', 'machen', 'gemacht',
+  'sagt', 'sagen', 'gesagt',
+  'sieht', 'sehen', 'gesehen',
+  'weiß', 'wissen', 'gewusst',
+  'findet', 'finden', 'gefunden',
+  'nimmt', 'nehmen', 'genommen',
+  'steht', 'stehen', 'gestanden',
+  'liegt', 'liegen', 'gelegen',
+  'bleibt', 'bleiben', 'geblieben',
+  'gilt', 'gelten', 'gegolten',
+  'heißt', 'heißen', 'geheißen',
+  
+  // Conjunctions
+  'und', 'oder', 'aber', 'auch', 'noch', 'nur', 'dann', 'wenn',
+  
+  // Prepositions
+  'mit', 'von', 'zu', 'in', 'auf', 'für', 'an', 'über', 'unter', 'vor', 'nach', 'bei', 'durch',
+  
+  // Negations
+  'nicht', 'kein', 'keine', 'keinen', 'keinem', 'keines',
+  
+  // Question/relative words
+  'dass', 'wie', 'was', 'wer', 'wo', 'wann', 'wohin', 'woher',
+  
+  // Pronouns
+  'ich', 'du', 'er', 'sie', 'es', 'wir', 'ihr', 'ihm', 'ihn', 'ihnen',
+  
+  // Possessive pronouns
+  'mein', 'meine', 'meinen', 'meinem', 'meines',
+  'dein', 'deine', 'deinen', 'deinem', 'deines',
+  'sein', 'seine', 'seinen', 'seinem', 'seines',
+  'ihr', 'ihre', 'ihren', 'ihrem', 'ihres',
+  'unser', 'unsere', 'unseren', 'unserem', 'unseres',
+  'euer', 'eure', 'euren', 'eurem', 'eures',
+  
+  // Demonstrative pronouns
+  'dies', 'diese', 'dieser', 'dieses', 'diesen', 'diesem',
+  
+  // Indefinite pronouns
+  'man', 'einer', 'jemand', 'niemand', 'etwas', 'nichts',
+  
+  // Quantifiers
+  'alle', 'alles', 'jeder', 'jede', 'jedes', 'jedem', 'jedem',
+  'viel', 'viele', 'wenig', 'wenige', 'mehr', 'meiste', 'meisten',
+  
+  // Modal verbs
+  'kann', 'können', 'muss', 'müssen', 'soll', 'sollen', 'will', 'wollen', 'darf', 'dürfen', 'mag', 'mögen'
+])
+
+// Function to check if a word is a common German word that should be excluded
+const isGermanCommonWord = (word) => {
+  const wordLower = word.toLowerCase().trim()
+  return GERMAN_COMMON_WORDS.has(wordLower)
+}
+
 // Color scheme for sentiment
 const SENTIMENT_COLORS = {
   'very-positive': '#059669',
@@ -497,7 +571,7 @@ function AICommunityAnalysis() {
         // Use those instead of calculation which might not always be present
         if (result.positive && Array.isArray(result.positive)) {
           result.positive.forEach(word => {
-            if (word && word.length > 2) { // Filter out very short words
+            if (word && word.length > 2 && !isGermanCommonWord(word)) { // Filter out very short words and German common words
               const wordLower = word.toLowerCase()
               positiveWords[wordLower] = (positiveWords[wordLower] || 0) + 1
               allWords[wordLower] = (allWords[wordLower] || 0) + 1
@@ -525,7 +599,7 @@ function AICommunityAnalysis() {
         
         if (result.negative && Array.isArray(result.negative)) {
           result.negative.forEach(word => {
-            if (word && word.length > 2) { // Filter out very short words
+            if (word && word.length > 2 && !isGermanCommonWord(word)) { // Filter out very short words and German common words
               const wordLower = word.toLowerCase()
               negativeWords[wordLower] = (negativeWords[wordLower] || 0) + 1
               allWords[wordLower] = (allWords[wordLower] || 0) + 1
@@ -554,7 +628,7 @@ function AICommunityAnalysis() {
         // Also check calculation if available (for more detailed scoring)
         if (result.calculation && typeof result.calculation === 'object') {
           Object.entries(result.calculation).forEach(([word, score]) => {
-            if (word && word.length > 2) {
+            if (word && word.length > 2 && !isGermanCommonWord(word)) {
               const wordLower = word.toLowerCase()
               if (score > 0) {
                 positiveWords[wordLower] = (positiveWords[wordLower] || 0) + 1

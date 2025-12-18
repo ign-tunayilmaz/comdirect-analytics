@@ -97,12 +97,60 @@ function DataCollector() {
       return
     }
     
-    const fromDate = new Date(filters.dateFrom)
-    const toDate = new Date(filters.dateTo)
+    // Parse dates - handle both YYYY-MM-DD and DD.MM.YYYY formats
+    let fromDate, toDate
+    try {
+      // Try ISO format first (YYYY-MM-DD)
+      if (filters.dateFrom.includes('-')) {
+        fromDate = new Date(filters.dateFrom)
+      } else if (filters.dateFrom.includes('.')) {
+        // Handle DD.MM.YYYY format
+        const [day, month, year] = filters.dateFrom.split('.')
+        fromDate = new Date(`${year}-${month}-${day}`)
+      } else {
+        fromDate = new Date(filters.dateFrom)
+      }
+      
+      if (filters.dateTo.includes('-')) {
+        toDate = new Date(filters.dateTo)
+      } else if (filters.dateTo.includes('.')) {
+        // Handle DD.MM.YYYY format
+        const [day, month, year] = filters.dateTo.split('.')
+        toDate = new Date(`${year}-${month}-${day}`)
+      } else {
+        toDate = new Date(filters.dateTo)
+      }
+    } catch (error) {
+      setStatus(`❌ Error: Invalid date format. Please use YYYY-MM-DD format. Error: ${error.message}`)
+      return
+    }
+    
+    // Validate dates
+    if (isNaN(fromDate.getTime())) {
+      setStatus(`❌ Error: Invalid "From Date": ${filters.dateFrom}. Please use YYYY-MM-DD format.`)
+      return
+    }
+    
+    if (isNaN(toDate.getTime())) {
+      setStatus(`❌ Error: Invalid "To Date": ${filters.dateTo}. Please use YYYY-MM-DD format.`)
+      return
+    }
+    
     const today = new Date()
     today.setHours(23, 59, 59, 999) // End of today
     
     const daysDiff = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24))
+    
+    console.log('📅 Date validation:', {
+      fromDate: filters.dateFrom,
+      toDate: filters.dateTo,
+      parsedFrom: fromDate.toISOString(),
+      parsedTo: toDate.toISOString(),
+      today: today.toISOString(),
+      daysDiff,
+      fromIsFuture: fromDate > today,
+      toIsFuture: toDate > today
+    })
     
     if (daysDiff < 0) {
       setStatus('❌ Error: "From Date" must be before "To Date".')
@@ -111,12 +159,12 @@ function DataCollector() {
     
     // Check if dates are in the future
     if (fromDate > today) {
-      setStatus('❌ Error: "From Date" cannot be in the future. Please select a date today or earlier.')
+      setStatus(`❌ Error: "From Date" (${filters.dateFrom}) is in the future. Please select a date today or earlier. Current date: ${today.toISOString().split('T')[0]}`)
       return
     }
     
     if (toDate > today) {
-      setStatus('❌ Error: "To Date" cannot be in the future. Please select a date today or earlier.')
+      setStatus(`❌ Error: "To Date" (${filters.dateTo}) is in the future. Please select a date today or earlier. Current date: ${today.toISOString().split('T')[0]}`)
       return
     }
     
@@ -186,7 +234,8 @@ function DataCollector() {
           console.log(`📊 Period ${i + 1} result:`, {
             total: result.total,
             postsCount: result.posts.length,
-            source: result.source
+            source: result.source,
+            dateRange: `${range.dateFrom} to ${range.dateTo}`
           })
           
           // Use loop instead of spread/apply to avoid stack overflow with large arrays
@@ -202,7 +251,12 @@ function DataCollector() {
           
           if (result.posts.length === 0) {
             console.warn(`⚠️ Period ${i + 1}/${dateRanges.length}: No posts collected for ${range.dateFrom} to ${range.dateTo}`)
-            setStatus(`⚠️ Period ${i + 1}: No data found for ${range.dateFrom} to ${range.dateTo}. Check console for details.`)
+            console.warn(`   This could mean:`)
+            console.warn(`   1. No data exists in the Khoros API for this date range`)
+            console.warn(`   2. The dates are in the future (API only has historical data)`)
+            console.warn(`   3. All records were filtered out by the API`)
+            console.warn(`   4. There was an API error (check network tab)`)
+            setStatus(`⚠️ Period ${i + 1}/${dateRanges.length}: No data found for ${range.dateFrom} to ${range.dateTo}. Check browser console for details.`)
           } else {
             console.log(`✅ Period ${i + 1}/${dateRanges.length}: Collected ${result.posts.length} posts`)
           }
@@ -242,7 +296,18 @@ function DataCollector() {
       
       setProgress(100)
       setProgressText(`Complete! Collected ${uniquePosts.length} unique posts`)
-      setStatus(`✅ Successfully collected ${uniquePosts.length} unique posts from ${dateRanges.length} time period(s)! (Total fetched: ${totalCollected})`)
+      
+      if (uniquePosts.length === 0) {
+        const today = new Date().toISOString().split('T')[0]
+        setStatus(`⚠️ No posts collected from ${dateRanges.length} time period(s). Possible reasons:
+        1. Selected dates are in the future (API only has historical data up to ${today})
+        2. No data exists in Khoros API for the selected date range
+        3. API returned empty results (check browser console for details)
+        
+        💡 Try selecting a date range in the past (e.g., last 30 days).`)
+      } else {
+        setStatus(`✅ Successfully collected ${uniquePosts.length} unique posts from ${dateRanges.length} time period(s)! (Total fetched: ${totalCollected})`)
+      }
       
       setTimeout(() => {
         setStatus('')

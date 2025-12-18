@@ -4,10 +4,11 @@ import Dashboard from './components/Dashboard'
 import DataCollector from './components/DataCollector'
 import Analytics from './components/Analytics'
 import CSVMetrics from './components/CSVMetrics'
+import AICommunityAnalysis from './components/AICommunityAnalysis'
 import Login from './components/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 import { isAuthenticated, logout, getCurrentUser, getCurrentUserName, getCurrentUserPicture } from './utils/auth'
-import { BarChart3, Database, TrendingUp, FileSpreadsheet, Menu, X, LogOut, User, Moon, Sun } from 'lucide-react'
+import { BarChart3, Database, TrendingUp, FileSpreadsheet, Brain, Menu, X, LogOut, User, Moon, Sun } from 'lucide-react'
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -136,6 +137,13 @@ function App() {
               <FileSpreadsheet size={24} />
               {isSidebarOpen && <span>CSV Metrics</span>}
             </Link>
+            <Link 
+              to="/ai-tools" 
+              className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <Brain size={24} />
+              {isSidebarOpen && <span>AI Tools</span>}
+            </Link>
           </nav>
           
           {isSidebarOpen && (
@@ -238,6 +246,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <CSVMetrics />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ai-tools" 
+              element={
+                <ProtectedRoute>
+                  <AICommunityAnalysis />
                 </ProtectedRoute>
               } 
             />

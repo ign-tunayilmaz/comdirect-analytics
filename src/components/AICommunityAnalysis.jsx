@@ -40,6 +40,8 @@ function AICommunityAnalysis() {
   const [selectedUser, setSelectedUser] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedTopic, setSelectedTopic] = useState(null)
+  const [selectedWord, setSelectedWord] = useState(null)
+  const [wordPosts, setWordPosts] = useState({})
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
@@ -480,10 +482,13 @@ function AICommunityAnalysis() {
     const positiveWords = {}
     const negativeWords = {}
     const allWords = {}
+    const wordToPosts = {} // Track which posts contain each word
     
     posts.forEach(post => {
       const text = `${post.topic || ''} ${post.content || ''}`.trim()
       if (!text || text.length < 3) return
+      
+      const textLower = text.toLowerCase()
       
       try {
         const result = sentiment.analyze(text)
@@ -493,8 +498,27 @@ function AICommunityAnalysis() {
         if (result.positive && Array.isArray(result.positive)) {
           result.positive.forEach(word => {
             if (word && word.length > 2) { // Filter out very short words
-              positiveWords[word] = (positiveWords[word] || 0) + 1
-              allWords[word] = (allWords[word] || 0) + 1
+              const wordLower = word.toLowerCase()
+              positiveWords[wordLower] = (positiveWords[wordLower] || 0) + 1
+              allWords[wordLower] = (allWords[wordLower] || 0) + 1
+              
+              // Track posts containing this word
+              if (!wordToPosts[wordLower]) {
+                wordToPosts[wordLower] = []
+              }
+              // Check if this post already added (avoid duplicates)
+              if (!wordToPosts[wordLower].find(p => p.id === post.id)) {
+                wordToPosts[wordLower].push({
+                  id: post.id,
+                  topic: post.topic,
+                  content: post.content,
+                  author: post.author,
+                  date: post.date,
+                  url: post.url,
+                  category: post.category,
+                  sentiment: sentiment.analyze(text).score
+                })
+              }
             }
           })
         }
@@ -502,8 +526,27 @@ function AICommunityAnalysis() {
         if (result.negative && Array.isArray(result.negative)) {
           result.negative.forEach(word => {
             if (word && word.length > 2) { // Filter out very short words
-              negativeWords[word] = (negativeWords[word] || 0) + 1
-              allWords[word] = (allWords[word] || 0) + 1
+              const wordLower = word.toLowerCase()
+              negativeWords[wordLower] = (negativeWords[wordLower] || 0) + 1
+              allWords[wordLower] = (allWords[wordLower] || 0) + 1
+              
+              // Track posts containing this word
+              if (!wordToPosts[wordLower]) {
+                wordToPosts[wordLower] = []
+              }
+              // Check if this post already added (avoid duplicates)
+              if (!wordToPosts[wordLower].find(p => p.id === post.id)) {
+                wordToPosts[wordLower].push({
+                  id: post.id,
+                  topic: post.topic,
+                  content: post.content,
+                  author: post.author,
+                  date: post.date,
+                  url: post.url,
+                  category: post.category,
+                  sentiment: sentiment.analyze(text).score
+                })
+              }
             }
           })
         }
@@ -512,12 +555,31 @@ function AICommunityAnalysis() {
         if (result.calculation && typeof result.calculation === 'object') {
           Object.entries(result.calculation).forEach(([word, score]) => {
             if (word && word.length > 2) {
+              const wordLower = word.toLowerCase()
               if (score > 0) {
-                positiveWords[word] = (positiveWords[word] || 0) + 1
+                positiveWords[wordLower] = (positiveWords[wordLower] || 0) + 1
               } else if (score < 0) {
-                negativeWords[word] = (negativeWords[word] || 0) + 1
+                negativeWords[wordLower] = (negativeWords[wordLower] || 0) + 1
               }
-              allWords[word] = (allWords[word] || 0) + 1
+              allWords[wordLower] = (allWords[wordLower] || 0) + 1
+              
+              // Track posts containing this word
+              if (!wordToPosts[wordLower]) {
+                wordToPosts[wordLower] = []
+              }
+              // Check if this post already added (avoid duplicates)
+              if (!wordToPosts[wordLower].find(p => p.id === post.id)) {
+                wordToPosts[wordLower].push({
+                  id: post.id,
+                  topic: post.topic,
+                  content: post.content,
+                  author: post.author,
+                  date: post.date,
+                  url: post.url,
+                  category: post.category,
+                  sentiment: result.score
+                })
+              }
             }
           })
         }
@@ -539,8 +601,12 @@ function AICommunityAnalysis() {
     console.log('📊 Word Analysis:', {
       topPositive: topPositive.length,
       topNegative: topNegative.length,
-      totalUniqueWords: Object.keys(allWords).length
+      totalUniqueWords: Object.keys(allWords).length,
+      wordToPostsCount: Object.keys(wordToPosts).length
     })
+    
+    // Store word-to-posts mapping in state
+    setWordPosts(wordToPosts)
     
     return {
       topPositive,
@@ -1531,15 +1597,94 @@ function AICommunityAnalysis() {
             </h2>
             {wordAnalysis.topPositive && wordAnalysis.topPositive.length > 0 ? (
               <div className="space-y-2">
-                {wordAnalysis.topPositive.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg"
-                  >
-                    <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
-                    <span className="text-green-600 dark:text-green-400 font-bold">{item.count}</span>
-                  </div>
-                ))}
+                {wordAnalysis.topPositive.map((item, index) => {
+                  const wordLower = item.word.toLowerCase()
+                  const postsForWord = wordPosts[wordLower] || []
+                  const isSelected = selectedWord === wordLower
+                  
+                  return (
+                    <div key={index}>
+                      <div
+                        onClick={() => setSelectedWord(isSelected ? null : wordLower)}
+                        className={`flex justify-between items-center p-2 rounded-lg cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-green-100 dark:bg-green-800 border-2 border-green-400 dark:border-green-600'
+                            : 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40'
+                        }`}
+                      >
+                        <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-600 dark:text-green-400 font-bold">{item.count}</span>
+                          {postsForWord.length > 0 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              ({postsForWord.length} posts)
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">{isSelected ? '▼' : '▶'}</span>
+                        </div>
+                      </div>
+                      {isSelected && postsForWord.length > 0 && (
+                        <div className="mt-2 ml-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto">
+                          <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-2">
+                            Posts containing "{item.word}" ({postsForWord.length})
+                          </h4>
+                          <div className="space-y-3">
+                            {postsForWord.slice(0, 20).map((post, postIndex) => (
+                              <div
+                                key={postIndex}
+                                className="p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm border border-gray-200 dark:border-gray-700"
+                              >
+                                <div className="flex justify-between items-start mb-1">
+                                  <div className="flex-1">
+                                    {post.topic && (
+                                      <h5 className="font-medium text-gray-800 dark:text-gray-200 mb-1">
+                                        {post.topic.length > 80 ? `${post.topic.substring(0, 80)}...` : post.topic}
+                                      </h5>
+                                    )}
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                      by {post.author || 'Unknown'} • {new Date(post.date).toLocaleDateString()}
+                                      {post.category && ` • ${post.category}`}
+                                    </p>
+                                    {post.content && (
+                                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 line-clamp-2">
+                                        {post.content.length > 150 ? `${post.content.substring(0, 150)}...` : post.content}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className={`ml-2 text-xs font-medium px-2 py-1 rounded ${
+                                    post.sentiment > 0
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                      : post.sentiment < 0
+                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                                  }`}>
+                                    {post.sentiment > 0 ? '+' : ''}{post.sentiment.toFixed(1)}
+                                  </span>
+                                </div>
+                                {post.url && (
+                                  <a
+                                    href={post.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 mt-1"
+                                  >
+                                    <MessageSquare size={12} />
+                                    View Post
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                            {postsForWord.length > 20 && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">
+                                Showing 20 of {postsForWord.length} posts
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -1555,15 +1700,94 @@ function AICommunityAnalysis() {
             </h2>
             {wordAnalysis.topNegative && wordAnalysis.topNegative.length > 0 ? (
               <div className="space-y-2">
-                {wordAnalysis.topNegative.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg"
-                  >
-                    <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
-                    <span className="text-red-600 dark:text-red-400 font-bold">{item.count}</span>
-                  </div>
-                ))}
+                {wordAnalysis.topNegative.map((item, index) => {
+                  const wordLower = item.word.toLowerCase()
+                  const postsForWord = wordPosts[wordLower] || []
+                  const isSelected = selectedWord === wordLower
+                  
+                  return (
+                    <div key={index}>
+                      <div
+                        onClick={() => setSelectedWord(isSelected ? null : wordLower)}
+                        className={`flex justify-between items-center p-2 rounded-lg cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-red-100 dark:bg-red-800 border-2 border-red-400 dark:border-red-600'
+                            : 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40'
+                        }`}
+                      >
+                        <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-red-600 dark:text-red-400 font-bold">{item.count}</span>
+                          {postsForWord.length > 0 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              ({postsForWord.length} posts)
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">{isSelected ? '▼' : '▶'}</span>
+                        </div>
+                      </div>
+                      {isSelected && postsForWord.length > 0 && (
+                        <div className="mt-2 ml-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto">
+                          <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-2">
+                            Posts containing "{item.word}" ({postsForWord.length})
+                          </h4>
+                          <div className="space-y-3">
+                            {postsForWord.slice(0, 20).map((post, postIndex) => (
+                              <div
+                                key={postIndex}
+                                className="p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm border border-gray-200 dark:border-gray-700"
+                              >
+                                <div className="flex justify-between items-start mb-1">
+                                  <div className="flex-1">
+                                    {post.topic && (
+                                      <h5 className="font-medium text-gray-800 dark:text-gray-200 mb-1">
+                                        {post.topic.length > 80 ? `${post.topic.substring(0, 80)}...` : post.topic}
+                                      </h5>
+                                    )}
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                      by {post.author || 'Unknown'} • {new Date(post.date).toLocaleDateString()}
+                                      {post.category && ` • ${post.category}`}
+                                    </p>
+                                    {post.content && (
+                                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 line-clamp-2">
+                                        {post.content.length > 150 ? `${post.content.substring(0, 150)}...` : post.content}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className={`ml-2 text-xs font-medium px-2 py-1 rounded ${
+                                    post.sentiment > 0
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                      : post.sentiment < 0
+                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                                  }`}>
+                                    {post.sentiment > 0 ? '+' : ''}{post.sentiment.toFixed(1)}
+                                  </span>
+                                </div>
+                                {post.url && (
+                                  <a
+                                    href={post.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 mt-1"
+                                  >
+                                    <MessageSquare size={12} />
+                                    View Post
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                            {postsForWord.length > 20 && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">
+                                Showing 20 of {postsForWord.length} posts
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">

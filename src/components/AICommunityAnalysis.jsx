@@ -482,21 +482,47 @@ function AICommunityAnalysis() {
     const allWords = {}
     
     posts.forEach(post => {
-      const text = `${post.topic || ''} ${post.content || ''}`.toLowerCase()
-      if (!text) return
+      const text = `${post.topic || ''} ${post.content || ''}`.trim()
+      if (!text || text.length < 3) return
       
-      const result = sentiment.analyze(text)
-      
-      // Extract words from calculation
-      if (result.calculation) {
-        Object.entries(result.calculation).forEach(([word, score]) => {
-          if (score > 0) {
-            positiveWords[word] = (positiveWords[word] || 0) + 1
-          } else if (score < 0) {
-            negativeWords[word] = (negativeWords[word] || 0) + 1
-          }
-          allWords[word] = (allWords[word] || 0) + 1
-        })
+      try {
+        const result = sentiment.analyze(text)
+        
+        // The sentiment library returns positive and negative arrays
+        // Use those instead of calculation which might not always be present
+        if (result.positive && Array.isArray(result.positive)) {
+          result.positive.forEach(word => {
+            if (word && word.length > 2) { // Filter out very short words
+              positiveWords[word] = (positiveWords[word] || 0) + 1
+              allWords[word] = (allWords[word] || 0) + 1
+            }
+          })
+        }
+        
+        if (result.negative && Array.isArray(result.negative)) {
+          result.negative.forEach(word => {
+            if (word && word.length > 2) { // Filter out very short words
+              negativeWords[word] = (negativeWords[word] || 0) + 1
+              allWords[word] = (allWords[word] || 0) + 1
+            }
+          })
+        }
+        
+        // Also check calculation if available (for more detailed scoring)
+        if (result.calculation && typeof result.calculation === 'object') {
+          Object.entries(result.calculation).forEach(([word, score]) => {
+            if (word && word.length > 2) {
+              if (score > 0) {
+                positiveWords[word] = (positiveWords[word] || 0) + 1
+              } else if (score < 0) {
+                negativeWords[word] = (negativeWords[word] || 0) + 1
+              }
+              allWords[word] = (allWords[word] || 0) + 1
+            }
+          })
+        }
+      } catch (error) {
+        console.warn('Error analyzing text for words:', error, text.substring(0, 50))
       }
     })
     
@@ -509,6 +535,12 @@ function AICommunityAnalysis() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
       .map(([word, count]) => ({ word, count }))
+    
+    console.log('📊 Word Analysis:', {
+      topPositive: topPositive.length,
+      topNegative: topNegative.length,
+      totalUniqueWords: Object.keys(allWords).length
+    })
     
     return {
       topPositive,
@@ -1497,34 +1529,48 @@ function AICommunityAnalysis() {
             <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
               Top Positive Words
             </h2>
-            <div className="space-y-2">
-              {wordAnalysis.topPositive.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg"
-                >
-                  <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
-                  <span className="text-green-600 dark:text-green-400 font-bold">{item.count}</span>
-                </div>
-              ))}
-            </div>
+            {wordAnalysis.topPositive && wordAnalysis.topPositive.length > 0 ? (
+              <div className="space-y-2">
+                {wordAnalysis.topPositive.map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg"
+                  >
+                    <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
+                    <span className="text-green-600 dark:text-green-400 font-bold">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <p>No positive words found in the analyzed posts.</p>
+                <p className="text-sm mt-2">The sentiment analysis may not have detected positive sentiment words in the text.</p>
+              </div>
+            )}
           </div>
 
           <div className="card">
             <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
               Top Negative Words
             </h2>
-            <div className="space-y-2">
-              {wordAnalysis.topNegative.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg"
-                >
-                  <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
-                  <span className="text-red-600 dark:text-red-400 font-bold">{item.count}</span>
-                </div>
-              ))}
-            </div>
+            {wordAnalysis.topNegative && wordAnalysis.topNegative.length > 0 ? (
+              <div className="space-y-2">
+                {wordAnalysis.topNegative.map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg"
+                  >
+                    <span className="text-gray-800 dark:text-white font-medium">{item.word}</span>
+                    <span className="text-red-600 dark:text-red-400 font-bold">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <p>No negative words found in the analyzed posts.</p>
+                <p className="text-sm mt-2">The sentiment analysis may not have detected negative sentiment words in the text.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
